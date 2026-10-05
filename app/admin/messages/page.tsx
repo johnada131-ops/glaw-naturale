@@ -49,7 +49,13 @@ export default function MessagesPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error loading contact messages:", error);
+      console.error("Error loading contact messages:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
       setErrorMessage("We couldn't load messages right now.");
     } else {
       setMessages(data ?? []);
@@ -83,41 +89,50 @@ export default function MessagesPage() {
     setActionId(message.id);
     setErrorMessage("");
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("contact_messages")
       .update({
         status,
-        updated_at: new Date().toISOString(),
       })
-      .eq("id", message.id);
+      .eq("id", message.id)
+      .select(
+        "id, name, email, phone, subject, message, status, created_at, updated_at"
+      )
+      .single();
 
     if (error) {
-      console.error("Error updating message:", error);
-      setErrorMessage("We couldn't update this message.");
+      console.error("Error updating message:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
+      setErrorMessage(
+        error.message || "We couldn't update this message."
+      );
+
+      setActionId(null);
+      return;
+    }
+
+    if (!data) {
+      console.error("Message update returned no data.");
+
+      setErrorMessage("The message could not be updated.");
+
       setActionId(null);
       return;
     }
 
     setMessages((current) =>
       current.map((item) =>
-        item.id === message.id
-          ? {
-              ...item,
-              status,
-              updated_at: new Date().toISOString(),
-            }
-          : item
+        item.id === message.id ? data : item
       )
     );
 
     setSelectedMessage((current) =>
-      current && current.id === message.id
-        ? {
-            ...current,
-            status,
-            updated_at: new Date().toISOString(),
-          }
-        : current
+      current && current.id === message.id ? data : current
     );
 
     setActionId(null);
@@ -141,8 +156,17 @@ export default function MessagesPage() {
       .eq("id", message.id);
 
     if (error) {
-      console.error("Error deleting message:", error);
-      setErrorMessage("We couldn't delete this message.");
+      console.error("Error deleting message:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
+      setErrorMessage(
+        error.message || "We couldn't delete this message."
+      );
+
       setActionId(null);
       return;
     }
@@ -570,7 +594,9 @@ export default function MessagesPage() {
                       disabled={actionId === selectedMessage.id}
                       className="rounded-xl bg-navy px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Mark as Read
+                      {actionId === selectedMessage.id
+                        ? "Updating..."
+                        : "Mark as Read"}
                     </button>
                   )}
 
@@ -583,7 +609,9 @@ export default function MessagesPage() {
                       disabled={actionId === selectedMessage.id}
                       className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-navy disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Mark as Unread
+                      {actionId === selectedMessage.id
+                        ? "Updating..."
+                        : "Mark as Unread"}
                     </button>
                   )}
 
@@ -596,7 +624,9 @@ export default function MessagesPage() {
                       disabled={actionId === selectedMessage.id}
                       className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-600 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Archive
+                      {actionId === selectedMessage.id
+                        ? "Updating..."
+                        : "Archive"}
                     </button>
                   )}
 
@@ -609,13 +639,18 @@ export default function MessagesPage() {
                       disabled={actionId === selectedMessage.id}
                       className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-navy disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Restore to Read
+                      {actionId === selectedMessage.id
+                        ? "Updating..."
+                        : "Restore to Read"}
                     </button>
                   )}
 
                   <a
                     href={`mailto:${selectedMessage.email}?subject=${encodeURIComponent(
-                      `Re: ${selectedMessage.subject || "Your message to GLAW Naturale"}`
+                      `Re: ${
+                        selectedMessage.subject ||
+                        "Your message to GLAW Naturale"
+                      }`
                     )}`}
                     className="rounded-xl bg-red px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-navy"
                   >

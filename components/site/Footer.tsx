@@ -8,6 +8,7 @@ import {
   FaEnvelope,
 } from "react-icons/fa";
 import { getSiteSettings } from "@/lib/site-settings";
+import NewsletterSignup from "@/components/NewsletterSignup";
 
 const navigation = [
   { name: "Home", href: "/" },
@@ -201,26 +202,7 @@ export default async function Footer() {
               from GLAW Naturale.
             </p>
 
-            <form className="mt-6 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-              <label htmlFor="newsletter-email" className="sr-only">
-                Email address
-              </label>
-
-              <input
-                id="newsletter-email"
-                type="email"
-                placeholder="Your email address"
-                required
-                className="min-h-11 flex-1 rounded-full border border-white/20 bg-white px-5 text-sm text-navy outline-none placeholder:text-gray-400 focus:border-white"
-              />
-
-              <button
-                type="submit"
-                className="min-h-11 rounded-full bg-red px-6 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-navy"
-              >
-                Subscribe
-              </button>
-            </form>
+            <NewsletterSignup />
           </div>
         </div>
       </div>

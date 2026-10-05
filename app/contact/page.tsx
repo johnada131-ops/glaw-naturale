@@ -143,8 +143,11 @@ export default function ContactPage() {
       console.error("Error submitting contact message:", error);
 
       setErrorMessage(
-        "We couldn't send your message right now. Please try again."
+        `Error: ${error.message}${
+          error.details ? ` — ${error.details}` : ""
+        }`
       );
+
       setIsSubmitting(false);
       return;
     }

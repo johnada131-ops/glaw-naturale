@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 
 type NotificationSettings = {
   id: string;
-  whatsapp_enabled: boolean;
-  admin_whatsapp_number: string | null;
   contact_message_notifications: boolean;
 };
 
@@ -35,8 +33,6 @@ export default function SettingsPage() {
     null
   );
 
-  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
-  const [adminWhatsappNumber, setAdminWhatsappNumber] = useState("");
   const [contactMessageNotifications, setContactMessageNotifications] =
     useState(true);
 
@@ -59,14 +55,12 @@ export default function SettingsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isTestingNotification, setIsTestingNotification] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [notificationTestMessage, setNotificationTestMessage] = useState("");
   const [accountMessage, setAccountMessage] = useState("");
   const [accountError, setAccountError] = useState("");
 
@@ -79,9 +73,7 @@ export default function SettingsPage() {
         await Promise.all([
           supabase
             .from("notification_settings")
-            .select(
-              "id, whatsapp_enabled, admin_whatsapp_number, contact_message_notifications"
-            )
+            .select("id, contact_message_notifications")
             .limit(1)
             .maybeSingle(),
 
@@ -115,8 +107,7 @@ export default function SettingsPage() {
         const data = notificationResult.data;
 
         setNotificationSettings(data);
-        setWhatsappEnabled(data.whatsapp_enabled);
-        setAdminWhatsappNumber(data.admin_whatsapp_number ?? "");
+
         setContactMessageNotifications(
           data.contact_message_notifications
         );
@@ -156,16 +147,6 @@ export default function SettingsPage() {
     setIsSaving(true);
     setSuccessMessage("");
     setErrorMessage("");
-    setNotificationTestMessage("");
-
-    if (whatsappEnabled && !adminWhatsappNumber.trim()) {
-      setErrorMessage(
-        "Enter an admin WhatsApp number before enabling notifications."
-      );
-
-      setIsSaving(false);
-      return;
-    }
 
     if (!notificationSettings || !siteSettings) {
       setErrorMessage(
@@ -180,9 +161,6 @@ export default function SettingsPage() {
       supabase
         .from("notification_settings")
         .update({
-          whatsapp_enabled: whatsappEnabled,
-          admin_whatsapp_number:
-            adminWhatsappNumber.trim() || null,
           contact_message_notifications: contactMessageNotifications,
           updated_at: new Date().toISOString(),
         })
@@ -222,46 +200,6 @@ export default function SettingsPage() {
 
     setSuccessMessage("Settings saved successfully.");
     setIsSaving(false);
-  };
-
-  const handleTestNotification = async () => {
-    setNotificationTestMessage("");
-    setSuccessMessage("");
-    setErrorMessage("");
-
-    if (!adminWhatsappNumber.trim()) {
-      setNotificationTestMessage(
-        "Enter an admin WhatsApp number first."
-      );
-
-      return;
-    }
-
-    if (!whatsappEnabled) {
-      setNotificationTestMessage(
-        "WhatsApp notifications are currently turned off."
-      );
-
-      return;
-    }
-
-    setIsTestingNotification(true);
-
-    /*
-     * Meta WhatsApp is not connected yet.
-     *
-     * We deliberately do not pretend to send a message.
-     * This button currently verifies that the notification
-     * settings are ready for the provider connection.
-     */
-
-    await new Promise((resolve) => setTimeout(resolve, 700));
-
-    setNotificationTestMessage(
-      "Your notification settings are ready. WhatsApp is not connected to Meta yet, so no message was sent."
-    );
-
-    setIsTestingNotification(false);
   };
 
   const handleUpdateEmail = async () => {
@@ -409,38 +347,46 @@ export default function SettingsPage() {
               </p>
 
               <h2 className="mt-2 text-xl font-bold text-navy">
-                WhatsApp Notifications
+                Admin Notifications
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
-                Control how GLAW Naturale receives administrative
-                notifications.
+                Control notifications that appear inside the GLAW Naturale
+                admin dashboard.
               </p>
             </div>
 
-            <div className="space-y-7 px-6 py-6 sm:px-8 sm:py-8">
+            <div className="px-6 py-6 sm:px-8 sm:py-8">
               <div className="flex items-start justify-between gap-6">
                 <div>
                   <h3 className="text-sm font-semibold text-navy">
-                    WhatsApp notifications
+                    New contact message notifications
                   </h3>
 
-                  <p className="mt-1 text-sm leading-6 text-gray-500">
-                    Turn automatic WhatsApp notifications on or off.
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
+                    Show an in-app notification in the admin dashboard
+                    whenever a new contact message is received.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setWhatsappEnabled(!whatsappEnabled)}
-                  aria-pressed={whatsappEnabled}
+                  onClick={() =>
+                    setContactMessageNotifications(
+                      !contactMessageNotifications
+                    )
+                  }
+                  aria-pressed={contactMessageNotifications}
+                  aria-label="Toggle contact message notifications"
                   className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                    whatsappEnabled ? "bg-red" : "bg-gray-300"
+                    contactMessageNotifications
+                      ? "bg-red"
+                      : "bg-gray-300"
                   }`}
                 >
                   <span
                     className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                      whatsappEnabled
+                      contactMessageNotifications
                         ? "translate-x-6"
                         : "translate-x-1"
                     }`}
@@ -448,106 +394,11 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              <div className="border-t border-gray-100 pt-7">
-                <label
-                  htmlFor="admin-whatsapp-number"
-                  className="text-sm font-semibold text-navy"
-                >
-                  Admin WhatsApp number
-                </label>
-
-                <p className="mt-1 text-sm leading-6 text-gray-500">
-                  This is the WhatsApp number that will receive
-                  administrative notifications. It is not displayed
-                  publicly.
+              <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="text-sm leading-6 text-blue-700">
+                  Notifications are handled inside the admin dashboard.
+                  No WhatsApp notification service is used.
                 </p>
-
-                <input
-                  id="admin-whatsapp-number"
-                  type="tel"
-                  value={adminWhatsappNumber}
-                  onChange={(event) =>
-                    setAdminWhatsappNumber(event.target.value)
-                  }
-                  placeholder="e.g. 2348069161689"
-                  className="mt-4 h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-navy outline-none transition-colors placeholder:text-gray-400 focus:border-navy sm:max-w-md"
-                />
-
-                <p className="mt-2 text-xs text-gray-400">
-                  Use the international format, including the country
-                  code.
-                </p>
-              </div>
-
-              <div className="border-t border-gray-100 pt-7">
-                <div className="flex items-start justify-between gap-6">
-                  <div>
-                    <h3 className="text-sm font-semibold text-navy">
-                      New contact message notifications
-                    </h3>
-
-                    <p className="mt-1 text-sm leading-6 text-gray-500">
-                      Send a WhatsApp notification whenever a new contact
-                      message is received.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setContactMessageNotifications(
-                        !contactMessageNotifications
-                      )
-                    }
-                    aria-pressed={contactMessageNotifications}
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                      contactMessageNotifications
-                        ? "bg-red"
-                        : "bg-gray-300"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                        contactMessageNotifications
-                          ? "translate-x-6"
-                          : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* TEST NOTIFICATION */}
-              <div className="border-t border-gray-100 pt-7">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold text-navy">
-                      Test notification
-                    </h3>
-
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500">
-                      Check whether your notification settings are ready
-                      before connecting WhatsApp.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleTestNotification}
-                    disabled={isTestingNotification}
-                    className="shrink-0 rounded-full border border-navy px-5 py-2.5 text-sm font-semibold text-navy transition-all hover:-translate-y-0.5 hover:bg-navy hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isTestingNotification
-                      ? "Checking..."
-                      : "Test Notification"}
-                  </button>
-                </div>
-
-                {notificationTestMessage && (
-                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-700">
-                    {notificationTestMessage}
-                  </div>
-                )}
               </div>
             </div>
           </section>
@@ -708,6 +559,7 @@ export default function SettingsPage() {
 
                 <p className="mt-1 text-xs leading-5 text-gray-500">
                   Number customers use when placing WhatsApp orders.
+                  This is separate from admin notifications.
                 </p>
 
                 <input
@@ -912,6 +764,7 @@ export default function SettingsPage() {
                     setMaintenanceMode(!maintenanceMode)
                   }
                   aria-pressed={maintenanceMode}
+                  aria-label="Toggle maintenance mode"
                   className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                     maintenanceMode ? "bg-red" : "bg-gray-300"
                   }`}
