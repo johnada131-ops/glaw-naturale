@@ -152,6 +152,7 @@ export default async function BlogArticlePage({
                 alt={post.title}
                 fill
                 priority
+                unoptimized
                 className="object-cover"
               />
             </div>
@@ -167,10 +168,7 @@ export default async function BlogArticlePage({
           {/* Content */}
           <div className="text-base leading-8 text-gray-700 sm:text-lg">
             {post.content.split(/\n\s*\n/).map((paragraph, index) => (
-              <p
-                key={index}
-                className="mb-7 whitespace-pre-line"
-              >
+              <p key={index} className="mb-7 whitespace-pre-line">
                 {paragraph}
               </p>
             ))}
