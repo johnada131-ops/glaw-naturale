@@ -33,33 +33,60 @@ const teamMembers = [
 export default function AboutPage() {
   return (
     <main className="bg-white text-navy">
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-surface">
-        <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10 lg:py-28">
-          <div className="max-w-4xl">
-            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
-              About GLAW Naturale
-            </p>
+      {/* HERO */}
+      <section className="bg-surface">
+        <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20 lg:px-10 lg:py-24">
+          <div className="grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+            <div className="max-w-2xl">
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
+                About GLAW Naturale
+              </p>
 
-            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Where health meets convenience, and nature meets your glass.
-            </h1>
+              <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                Where health meets convenience, and nature meets your glass.
+              </h1>
 
-            <p className="mt-6 max-w-2xl text-base leading-8 text-gray-600 sm:text-lg">
-              GLAW Naturale N More is a natural wellness brand established to
-              make healthy living more practical, accessible, and enjoyable
-              through fresh natural drinks and lifestyle-focused wellness
-              solutions.
-            </p>
+              <p className="mt-6 text-base leading-8 text-gray-600 sm:text-lg">
+                GLAW Naturale N More is a natural wellness brand established
+                to make healthy living more practical, accessible, and
+                enjoyable through fresh natural drinks and lifestyle-focused
+                wellness solutions.
+              </p>
+            </div>
+
+            <div className="relative overflow-hidden rounded-3xl bg-white">
+              <div className="relative aspect-[4/3]">
+                <Image
+                  src="/about/about-hero.jpg"
+                  alt="Healthy natural lifestyle"
+                  fill
+                  priority
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 55vw"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Our Story */}
+      {/* OUR STORY */}
       <section className="bg-white">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
-          <div className="grid gap-12 lg:grid-cols-[1fr_1.15fr] lg:items-center">
-            <div>
+          <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-16">
+            <div className="relative order-2 overflow-hidden rounded-3xl bg-surface lg:order-1">
+              <div className="relative aspect-[4/3]">
+                <Image
+                  src="/about/our-story.jpg"
+                  alt="Healthy natural lifestyle and fresh drinks"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              </div>
+            </div>
+
+            <div className="order-1 lg:order-2">
               <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
                 Our Story
               </p>
@@ -67,37 +94,39 @@ export default function AboutPage() {
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
                 A healthier choice, born from a personal journey.
               </h2>
-            </div>
 
-            <div className="space-y-5 text-base leading-8 text-gray-600">
-              <p>
-                GLAW Naturale N More began on August 11, 2020, from a personal
-                desire to live healthier and make better lifestyle choices.
-              </p>
+              <div className="mt-6 space-y-5 text-base leading-8 text-gray-600">
+                <p>
+                  GLAW Naturale N More began on August 11, 2020, from a
+                  personal desire to live healthier and make better lifestyle
+                  choices.
+                </p>
 
-              <p>
-                What started as a personal journey grew into a brand focused
-                on helping people make healthier choices without making
-                wellness feel complicated or inaccessible.
-              </p>
+                <p>
+                  What started as a personal journey grew into a brand focused
+                  on helping people make healthier choices without making
+                  wellness feel complicated or inaccessible.
+                </p>
 
-              <p>
-                Today, GLAW Naturale creates fresh fruit and vegetable juices
-                and tigernut milk while also encouraging healthy living,
-                lifestyle modification, fitness, and better everyday choices.
-              </p>
+                <p>
+                  Today, GLAW Naturale creates fresh fruit and vegetable juices
+                  and tigernut milk while also encouraging healthy living,
+                  lifestyle modification, fitness, and better everyday
+                  choices.
+                </p>
 
-              <p>
-                At the heart of the brand is a simple belief: choosing
-                something healthier should be convenient enough to become part
-                of everyday life.
-              </p>
+                <p>
+                  At the heart of the brand is a simple belief: choosing
+                  something healthier should be convenient enough to become
+                  part of everyday life.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* What We Do */}
+      {/* WHAT WE DO */}
       <section className="bg-surface">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="max-w-3xl">
@@ -159,7 +188,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* What We Stand For */}
+      {/* WHAT WE STAND FOR */}
       <section className="bg-white">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -203,7 +232,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Founder */}
+      {/* FOUNDER */}
       <section className="bg-surface">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
@@ -257,7 +286,58 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Team */}
+      {/* BUSY PROFESSIONALS */}
+      <section className="bg-white">
+        <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
+          <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-16">
+            <div>
+              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
+                For Busy Professionals
+              </p>
+
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                Healthy living should fit into your life.
+              </h2>
+
+              <div className="mt-6 space-y-5 text-base leading-8 text-gray-600">
+                <p>
+                  We understand that maintaining a healthy lifestyle can be
+                  difficult when work, responsibilities, and a demanding
+                  schedule leave little time for it.
+                </p>
+
+                <p>
+                  That is why convenience matters. GLAW Naturale is built to
+                  make natural choices easier to include in everyday routines,
+                  especially for busy professionals who want to take better
+                  care of their health without adding unnecessary complexity
+                  to their lives.
+                </p>
+
+                <p>
+                  From a demanding workday to the routines that follow it,
+                  choosing something natural can be a simple step toward a
+                  healthier lifestyle.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative overflow-hidden rounded-3xl bg-surface">
+              <div className="relative aspect-[4/5] sm:aspect-[4/3] lg:aspect-[4/5]">
+                <Image
+                  src="/about/busy-professional.jpg"
+                  alt="Busy professional making a healthy lifestyle choice"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* TEAM */}
       <section className="bg-white">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="mx-auto max-w-2xl text-center">
@@ -304,7 +384,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Community */}
+      {/* COMMUNITY */}
       <section className="bg-surface">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="mx-auto max-w-3xl text-center">
@@ -342,7 +422,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Vision */}
+      {/* VISION */}
       <section className="bg-white">
         <div className="mx-auto max-w-5xl px-5 py-20 text-center sm:px-8 lg:px-10 lg:py-24">
           <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
@@ -361,7 +441,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Mission */}
+      {/* MISSION */}
       <section className="bg-navy text-white">
         <div className="mx-auto max-w-5xl px-5 py-20 text-center sm:px-8 lg:px-10 lg:py-24">
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-blue">
@@ -374,7 +454,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Location */}
+      {/* LOCATION */}
       <section className="bg-white">
         <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-10 lg:py-24">
           <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10 lg:flex lg:items-center lg:justify-between lg:gap-10">
@@ -413,7 +493,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Brand Statement */}
+      {/* BRAND STATEMENT */}
       <section className="bg-surface">
         <div className="mx-auto max-w-4xl px-5 py-20 text-center sm:px-8 lg:px-10 lg:py-24">
           <p className="text-2xl font-bold leading-relaxed tracking-tight text-navy sm:text-3xl">
