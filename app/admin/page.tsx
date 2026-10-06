@@ -13,54 +13,55 @@ import {
   FiMail,
   FiPackage,
   FiSettings,
+  FiStar,
   FiUsers,
   FiX,
 } from "react-icons/fi";
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient();
-
 type NotificationMessage = {
   id: string;
-  name: string | null;
-  email: string | null;
-  message: string | null;
+  name: string;
+  email: string;
+  message: string;
+  status: string;
   created_at: string;
-  is_read: boolean;
 };
 
-const SUBSCRIBER_LAST_SEEN_KEY = "glaw_admin_subscribers_last_seen";
+type DashboardStats = {
+  products: number;
+  blogPosts: number;
+  messages: number;
+  subscribers: number;
+  testimonials: number;
+  pendingTestimonials: number;
+};
+
+const SUBSCRIBERS_LAST_SEEN_KEY = "glaw_admin_subscribers_last_seen";
 
 export default function AdminDashboard() {
-  /*
-   * Desktop sidebar:
-   * true  = expanded
-   * false = collapsed
-   *
-   * Mobile:
-   * sidebar is completely hidden.
-   */
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [productCount, setProductCount] = useState(0);
   const [blogPostCount, setBlogPostCount] = useState(0);
   const [messageCount, setMessageCount] = useState(0);
   const [subscriberCount, setSubscriberCount] = useState(0);
+  const [testimonialCount, setTestimonialCount] = useState(0);
+  const [pendingTestimonialCount, setPendingTestimonialCount] = useState(0);
 
   const [loadingStats, setLoadingStats] = useState(true);
 
-  const [notificationsEnabled, setNotificationsEnabled] =
-    useState(true);
-
-  const [notifications, setNotifications] = useState<
-    NotificationMessage[]
-  >([]);
-
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notifications, setNotifications] = useState<NotificationMessage[]>(
+    []
+  );
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   const [newSubscriberCount, setNewSubscriberCount] = useState(0);
 
-  const navigation = [
+  const supabase = createClient();
+
+  const navItems = [
     {
       label: "Dashboard",
       href: "/admin",
@@ -75,6 +76,11 @@ export default function AdminDashboard() {
       label: "Blog",
       href: "/admin/blog",
       icon: FiBookOpen,
+    },
+    {
+      label: "Testimonials",
+      href: "/admin/testimonials",
+      icon: FiStar,
     },
     {
       label: "Messages",
@@ -93,6 +99,151 @@ export default function AdminDashboard() {
     },
   ];
 
+  async function loadDashboardData() {
+    try {
+      setLoadingStats(true);
+
+      const [
+        productsResult,
+        blogPostsResult,
+        messagesResult,
+        subscribersResult,
+        testimonialsResult,
+        pendingTestimonialsResult,
+        notificationSettingsResult,
+        unreadMessagesResult,
+      ] = await Promise.all([
+        supabase
+          .from("products")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("blog_posts")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("contact_messages")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("newsletter_subscribers")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active"),
+
+        supabase
+          .from("testimonials")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("testimonials")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+
+        supabase
+          .from("notification_settings")
+          .select("contact_message_notifications")
+          .limit(1)
+          .maybeSingle(),
+
+        supabase
+          .from("contact_messages")
+          .select("id,name,email,message,status,created_at")
+          .neq("status", "read")
+          .order("created_at", { ascending: false })
+          .limit(8),
+      ]);
+
+      if (productsResult.error) {
+        console.error("Products count error:", productsResult.error);
+      }
+
+      if (blogPostsResult.error) {
+        console.error("Blog posts count error:", blogPostsResult.error);
+      }
+
+      if (messagesResult.error) {
+        console.error("Messages count error:", messagesResult.error);
+      }
+
+      if (subscribersResult.error) {
+        console.error("Subscribers count error:", subscribersResult.error);
+      }
+
+      if (testimonialsResult.error) {
+        console.error("Testimonials count error:", testimonialsResult.error);
+      }
+
+      if (pendingTestimonialsResult.error) {
+        console.error(
+          "Pending testimonials count error:",
+          pendingTestimonialsResult.error
+        );
+      }
+
+      if (notificationSettingsResult.error) {
+        console.error(
+          "Notification settings error:",
+          notificationSettingsResult.error
+        );
+      }
+
+      if (unreadMessagesResult.error) {
+        console.error(
+          "Unread messages error:",
+          unreadMessagesResult.error
+        );
+      }
+
+      setProductCount(productsResult.count ?? 0);
+      setBlogPostCount(blogPostsResult.count ?? 0);
+      setMessageCount(messagesResult.count ?? 0);
+      setSubscriberCount(subscribersResult.count ?? 0);
+      setTestimonialCount(testimonialsResult.count ?? 0);
+      setPendingTestimonialCount(pendingTestimonialsResult.count ?? 0);
+
+      setNotificationsEnabled(
+        notificationSettingsResult.data?.contact_message_notifications ??
+          true
+      );
+
+      setNotifications(unreadMessagesResult.data ?? []);
+
+      /*
+       * Track new newsletter subscribers locally.
+       *
+       * This prevents the dashboard from treating every existing
+       * subscriber as a new notification.
+       */
+      const currentSubscriberCount = subscribersResult.count ?? 0;
+
+      const storedLastSeen = localStorage.getItem(
+        SUBSCRIBERS_LAST_SEEN_KEY
+      );
+
+      if (storedLastSeen === null) {
+        localStorage.setItem(
+          SUBSCRIBERS_LAST_SEEN_KEY,
+          String(currentSubscriberCount)
+        );
+        setNewSubscriberCount(0);
+      } else {
+        const lastSeenCount = Number(storedLastSeen);
+
+        if (currentSubscriberCount > lastSeenCount) {
+          setNewSubscriberCount(
+            currentSubscriberCount - lastSeenCount
+          );
+        } else {
+          setNewSubscriberCount(0);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load dashboard data:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  }
+
   useEffect(() => {
     loadDashboardData();
 
@@ -103,1203 +254,555 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  async function loadDashboardData() {
-    try {
-      const [
-        productsResult,
-        blogResult,
-        messagesResult,
-        subscribersResult,
-        settingsResult,
-        notificationsResult,
-      ] = await Promise.all([
-        supabase
-          .from("products")
-          .select("*", { count: "exact", head: true }),
+  const unreadMessageCount = notifications.length;
 
-        supabase
-          .from("blog_posts")
-          .select("*", { count: "exact", head: true }),
-
-        supabase
-          .from("contact_messages")
-          .select("*", { count: "exact", head: true }),
-
-        supabase
-          .from("subscribers")
-          .select("*", { count: "exact", head: true }),
-
-        supabase
-          .from("admin_settings")
-          .select("notifications_enabled")
-          .maybeSingle(),
-
-        supabase
-          .from("contact_messages")
-          .select(
-            "id, name, email, message, created_at, is_read"
-          )
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(8),
-      ]);
-
-      setProductCount(productsResult.count ?? 0);
-      setBlogPostCount(blogResult.count ?? 0);
-      setMessageCount(messagesResult.count ?? 0);
-      setSubscriberCount(subscribersResult.count ?? 0);
-
-      if (!settingsResult.error && settingsResult.data) {
-        setNotificationsEnabled(
-          settingsResult.data.notifications_enabled ?? true
-        );
-      }
-
-      if (!notificationsResult.error) {
-        setNotifications(notificationsResult.data ?? []);
-      }
-
-      /*
-       * Subscriber notification tracking.
-       * We remember the subscriber count the last time
-       * the admin viewed the dashboard.
-       */
-      if (typeof window !== "undefined") {
-        const storedLastSeen = localStorage.getItem(
-          SUBSCRIBER_LAST_SEEN_KEY
-        );
-
-        if (storedLastSeen) {
-          const lastSeenCount = Number(storedLastSeen);
-
-          if (!Number.isNaN(lastSeenCount)) {
-            setNewSubscriberCount(
-              Math.max(0, (subscribersResult.count ?? 0) - lastSeenCount)
-            );
-          }
-        } else {
-          setNewSubscriberCount(0);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load admin dashboard data:", error);
-    } finally {
-      setLoadingStats(false);
-    }
-  }
+  const notificationCount =
+    (notificationsEnabled ? unreadMessageCount : 0) +
+    newSubscriberCount +
+    pendingTestimonialCount;
 
   function markSubscribersAsSeen() {
-    if (typeof window === "undefined") return;
-
     localStorage.setItem(
-      SUBSCRIBER_LAST_SEEN_KEY,
+      SUBSCRIBERS_LAST_SEEN_KEY,
       String(subscriberCount)
     );
 
     setNewSubscriberCount(0);
   }
 
-  async function handleSignOut() {
+  async function handleLogout() {
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
 
-  function formatNotificationTime(dateString: string) {
-    const date = new Date(dateString);
+  const stats = [
+    {
+      label: "Products",
+      value: productCount,
+      icon: FiPackage,
+      href: "/admin/products",
+    },
+    {
+      label: "Blog Posts",
+      value: blogPostCount,
+      icon: FiBookOpen,
+      href: "/admin/blog",
+    },
+    {
+      label: "Messages",
+      value: messageCount,
+      icon: FiMail,
+      href: "/admin/messages",
+    },
+    {
+      label: "Subscribers",
+      value: subscriberCount,
+      icon: FiUsers,
+      href: "/admin/subscribers",
+    },
+    {
+      label: "Testimonials",
+      value: testimonialCount,
+      icon: FiStar,
+      href: "/admin/testimonials",
+      badge:
+        pendingTestimonialCount > 0
+          ? `${pendingTestimonialCount} pending`
+          : undefined,
+    },
+  ];
 
-    return date.toLocaleString("en-NG", {
-      day: "numeric",
-      month: "short",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  const unreadMessages = notifications.filter(
-    (notification) => !notification.is_read
-  ).length;
-
-  const notificationCount =
-    unreadMessages + newSubscriberCount;
+  const quickActions = [
+    {
+      label: "Manage Products",
+      description: "Add, edit and organize products",
+      href: "/admin/products",
+      icon: FiPackage,
+    },
+    {
+      label: "Manage Blog",
+      description: "Create and manage blog posts",
+      href: "/admin/blog",
+      icon: FiBookOpen,
+    },
+    {
+      label: "Testimonials",
+      description: "Review customer testimonials",
+      href: "/admin/testimonials",
+      icon: FiStar,
+    },
+    {
+      label: "Messages",
+      description: "View customer enquiries",
+      href: "/admin/messages",
+      icon: FiMail,
+    },
+    {
+      label: "Subscribers",
+      description: "Manage newsletter subscribers",
+      href: "/admin/subscribers",
+      icon: FiUsers,
+    },
+    {
+      label: "Settings",
+      description: "Manage website settings",
+      href: "/admin/settings",
+      icon: FiSettings,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900">
-      {/* =========================================================
-          DESKTOP ADMIN SIDEBAR
-          Hidden completely on mobile.
-         ========================================================= */}
-
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Desktop Sidebar */}
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-40 hidden
-          flex-col border-r border-slate-200 bg-white
-          shadow-sm transition-all duration-300 lg:flex
-          ${sidebarOpen ? "w-[270px]" : "w-[76px]"}
-        `}
+        className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-slate-200 bg-white transition-all duration-300 lg:flex ${
+          sidebarOpen ? "w-[270px]" : "w-[76px]"
+        }`}
       >
-        {/* Sidebar collapse / expand control */}
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((current) => !current)}
-          title={
-            sidebarOpen
-              ? "Collapse sidebar"
-              : "Expand sidebar"
-          }
-          aria-label={
-            sidebarOpen
-              ? "Collapse sidebar"
-              : "Expand sidebar"
-          }
-          className="
-            absolute -right-3 top-7 z-50
-            flex h-8 w-8 items-center justify-center
-            rounded-full
-            bg-[#0d3b66]
-            text-white
-            shadow-md
-            ring-4 ring-[#f8fafc]
-            transition
-            hover:bg-[#092f52]
-            focus:outline-none
-            focus:ring-2
-            focus:ring-[#d62828]
-            focus:ring-offset-2
-          "
-        >
-          {sidebarOpen ? (
-            <FiChevronLeft size={17} />
-          ) : (
-            <FiChevronRight size={17} />
-          )}
-        </button>
-
-        {/* Sidebar header */}
-        <div
-          className={`
-            flex h-[82px] shrink-0 items-center
-            border-b border-slate-100
-            ${
-              sidebarOpen
-                ? "justify-start px-6"
-                : "justify-center px-2"
-            }
-          `}
-        >
+        <div className="flex h-20 items-center border-b border-slate-200 px-4">
           <Link
             href="/admin"
-            className="flex items-center"
-            title="GLAW Naturale Admin"
+            className={`flex items-center ${
+              sidebarOpen ? "gap-3" : "justify-center"
+            }`}
           >
-            {sidebarOpen ? (
-              <Image
-                src="/images/glaw-naturale-logo.svg"
-                alt="GLAW Naturale"
-                width={145}
-                height={48}
-                className="h-auto w-[145px]"
-                priority
-              />
-            ) : (
-              <Image
-                src="/images/glaw-naturale-logo.svg"
-                alt="GLAW Naturale"
-                width={42}
-                height={42}
-                className="h-[42px] w-[42px] object-contain"
-                priority
-              />
+            <Image
+              src="/images/glaw-naturale-logo.svg"
+              alt="GLAW Naturale"
+              width={42}
+              height={42}
+              className="h-10 w-10 object-contain"
+            />
+
+            {sidebarOpen && (
+              <div>
+                <p className="text-sm font-bold tracking-wide text-[#0d3b66]">
+                  GLAW NATURALE
+                </p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                  Admin
+                </p>
+              </div>
             )}
           </Link>
         </div>
 
-        {/* Sidebar navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-6">
-          <div className="space-y-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = item.href === "/admin";
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = item.href === "/admin";
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={!sidebarOpen ? item.label : undefined}
-                  className={`
-                    flex items-center rounded-xl
-                    text-sm font-semibold
-                    transition
-                    ${
-                      sidebarOpen
-                        ? "gap-3 px-4 py-3"
-                        : "justify-center px-2 py-3"
-                    }
-                    ${
-                      isActive
-                        ? "bg-[#0d3b66] text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-[#0d3b66]"
-                    }
-                  `}
-                >
-                  <Icon size={19} className="shrink-0" />
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex items-center rounded-xl px-3 py-3 text-sm font-medium transition ${
+                  active
+                    ? "bg-[#0d3b66] text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-[#0d3b66]"
+                } ${sidebarOpen ? "gap-3" : "justify-center"}`}
+                title={!sidebarOpen ? item.label : undefined}
+              >
+                <Icon size={19} />
 
-                  {sidebarOpen && (
-                    <span>{item.label}</span>
+                {sidebarOpen && <span>{item.label}</span>}
+
+                {sidebarOpen &&
+                  item.label === "Testimonials" &&
+                  pendingTestimonialCount > 0 && (
+                    <span className="ml-auto rounded-full bg-[#d62828] px-2 py-0.5 text-[10px] font-bold text-white">
+                      {pendingTestimonialCount}
+                    </span>
                   )}
-
-                  {item.label === "Subscribers" &&
-                    newSubscriberCount > 0 &&
-                    sidebarOpen && (
-                      <span
-                        className="
-                          ml-auto flex h-5 min-w-5
-                          items-center justify-center
-                          rounded-full
-                          bg-[#d62828]
-                          px-1.5
-                          text-[10px]
-                          font-bold
-                          text-white
-                        "
-                      >
-                        {newSubscriberCount > 99
-                          ? "99+"
-                          : newSubscriberCount}
-                      </span>
-                    )}
-                </Link>
-              );
-            })}
-          </div>
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Sidebar bottom */}
-        <div className="border-t border-slate-100 p-3">
+        <div className="border-t border-slate-200 p-3">
           <button
             type="button"
-            onClick={handleSignOut}
-            title={!sidebarOpen ? "Sign out" : undefined}
-            className={`
-              flex w-full items-center
-              rounded-xl
-              bg-[#d62828]
-              text-sm font-semibold
-              text-white
-              transition
-              hover:bg-[#b91f1f]
-              focus:outline-none
-              focus:ring-2
-              focus:ring-[#d62828]
-              focus:ring-offset-2
-              ${
-                sidebarOpen
-                  ? "gap-3 px-4 py-3"
-                  : "justify-center px-2 py-3"
-              }
-            `}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="flex w-full items-center justify-center rounded-xl border border-slate-200 py-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-[#0d3b66]"
+            aria-label={
+              sidebarOpen ? "Collapse sidebar" : "Expand sidebar"
+            }
           >
-            <FiX size={18} />
-
-            {sidebarOpen && <span>Sign Out</span>}
+            {sidebarOpen ? (
+              <FiChevronLeft size={19} />
+            ) : (
+              <FiChevronRight size={19} />
+            )}
           </button>
         </div>
       </aside>
 
-      {/* =========================================================
-          MAIN CONTENT
-         ========================================================= */}
-
+      {/* Main Content */}
       <main
-        className={`
-          min-h-screen
-          transition-all duration-300
-          ${
-            sidebarOpen
-              ? "lg:ml-[270px]"
-              : "lg:ml-[76px]"
-          }
-        `}
+        className={`min-h-screen transition-all duration-300 ${
+          sidebarOpen ? "lg:ml-[270px]" : "lg:ml-[76px]"
+        }`}
       >
-        {/* =======================================================
-            HEADER
-           ======================================================= */}
-
-        <header
-          className="
-            sticky top-0 z-30
-            border-b border-slate-200
-            bg-white/95
-            backdrop-blur
-          "
-        >
-          <div
-            className="
-              flex min-h-[76px]
-              items-center justify-between
-              gap-4
-              px-4 py-4
-              sm:px-6
-              lg:px-8
-          "
-          >
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#d62828]">
-                GLAW Naturale
-              </p>
-
-              <h1 className="mt-1 truncate text-xl font-bold text-[#0d3b66] sm:text-2xl">
+        {/* Header */}
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Admin Dashboard
+              </p>
+              <h1 className="mt-1 text-xl font-bold text-[#0d3b66] sm:text-2xl">
+                Welcome back
               </h1>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Notifications */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() =>
-                    setNotificationOpen(
-                      (current) => !current
-                    )
-                  }
-                  aria-label="Open notifications"
-                  title="Notifications"
-                  className="
-                    relative flex h-11 w-11
-                    items-center justify-center
-                    rounded-xl
-                    bg-[#0d3b66]
-                    text-white
-                    shadow-sm
-                    transition
-                    hover:bg-[#092f52]
-                    focus:outline-none
-                    focus:ring-2
-                    focus:ring-[#0d3b66]
-                    focus:ring-offset-2
-                  "
+                  onClick={() => {
+                    setNotificationOpen(!notificationOpen);
+                    markSubscribersAsSeen();
+                  }}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-[#0d3b66]"
+                  aria-label="Notifications"
                 >
                   <FiBell size={19} />
 
-                  {notificationsEnabled &&
-                    notificationCount > 0 && (
-                      <span
-                        className="
-                          absolute -right-1 -top-1
-                          flex h-5 min-w-5
-                          items-center justify-center
-                          rounded-full
-                          bg-[#d62828]
-                          px-1
-                          text-[10px]
-                          font-bold
-                          text-white
-                          ring-2
-                          ring-white
-                        "
-                      >
-                        {notificationCount > 99
-                          ? "99+"
-                          : notificationCount}
-                      </span>
-                    )}
+                  {notificationCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#d62828] px-1 text-[10px] font-bold text-white">
+                      {notificationCount > 9 ? "9+" : notificationCount}
+                    </span>
+                  )}
                 </button>
 
-                {/* Notification dropdown */}
                 {notificationOpen && (
                   <>
-                    <button
-                      type="button"
-                      aria-label="Close notifications"
-                      className="fixed inset-0 z-40 cursor-default"
-                      onClick={() =>
-                        setNotificationOpen(false)
-                      }
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setNotificationOpen(false)}
                     />
 
-                    <div
-                      className="
-                        absolute right-0 top-14 z-50
-                        w-[min(360px,calc(100vw-32px))]
-                        overflow-hidden
-                        rounded-2xl
-                        border border-slate-200
-                        bg-white
-                        shadow-xl
-                      "
-                    >
+                    <div className="absolute right-0 z-50 mt-3 w-[320px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-[380px]">
                       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
                         <div>
-                          <h2 className="text-sm font-bold text-[#0d3b66]">
+                          <h3 className="font-semibold text-slate-900">
                             Notifications
-                          </h2>
-
-                          <p className="mt-1 text-xs text-slate-500">
-                            Recent admin activity
+                          </h3>
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            Recent activity
                           </p>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() =>
-                            setNotificationOpen(false)
-                          }
-                          aria-label="Close notifications"
-                          className="
-                            flex h-8 w-8
-                            items-center justify-center
-                            rounded-lg
-                            text-slate-500
-                            transition
-                            hover:bg-slate-100
-                            hover:text-slate-800
-                          "
+                          onClick={() => setNotificationOpen(false)}
+                          className="text-slate-400 hover:text-slate-700"
                         >
-                          <FiX size={17} />
+                          <FiX size={18} />
                         </button>
                       </div>
 
-                      <div className="max-h-[380px] overflow-y-auto">
-                        {newSubscriberCount > 0 && (
+                      <div className="max-h-[360px] overflow-y-auto">
+                        {pendingTestimonialCount > 0 && (
                           <Link
-                            href="/admin/subscribers"
-                            onClick={markSubscribersAsSeen}
-                            className="
-                              block border-b
-                              border-slate-100
-                              px-4 py-4
-                              transition
-                              hover:bg-slate-50
-                            "
+                            href="/admin/testimonials"
+                            onClick={() => setNotificationOpen(false)}
+                            className="block border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50"
                           >
-                            <div className="flex items-start gap-3">
-                              <div
-                                className="
-                                  flex h-9 w-9 shrink-0
-                                  items-center justify-center
-                                  rounded-full
-                                  bg-[#d62828]
-                                  text-white
-                                "
-                              >
-                                <FiUsers size={17} />
+                            <div className="flex gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-[#d62828]">
+                                <FiStar size={17} />
                               </div>
 
-                              <div className="min-w-0">
+                              <div>
                                 <p className="text-sm font-semibold text-slate-800">
-                                  New subscribers
+                                  Pending testimonials
                                 </p>
-
                                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                                  {newSubscriberCount} new{" "}
-                                  {newSubscriberCount === 1
-                                    ? "subscriber"
-                                    : "subscribers"}{" "}
-                                  since your last visit.
+                                  {pendingTestimonialCount} testimonial
+                                  {pendingTestimonialCount === 1
+                                    ? ""
+                                    : "s"} waiting for review.
                                 </p>
                               </div>
                             </div>
                           </Link>
                         )}
 
-                        {notifications.length > 0 ? (
-                          notifications.map(
-                            (notification) => (
-                              <Link
-                                key={notification.id}
-                                href="/admin/messages"
-                                onClick={() =>
-                                  setNotificationOpen(false)
-                                }
-                                className="
-                                  block border-b
-                                  border-slate-100
-                                  px-4 py-4
-                                  transition
-                                  hover:bg-slate-50
-                                "
-                              >
-                                <div className="flex items-start gap-3">
-                                  <div
-                                    className={`
-                                      flex h-9 w-9 shrink-0
-                                      items-center justify-center
-                                      rounded-full
-                                      ${
-                                        notification.is_read
-                                          ? "bg-slate-100 text-slate-500"
-                                          : "bg-[#0d3b66] text-white"
-                                      }
-                                    `}
-                                  >
-                                    <FiMail size={16} />
-                                  </div>
+                        {newSubscriberCount > 0 && (
+                          <Link
+                            href="/admin/subscribers"
+                            onClick={() => setNewSubscriberCount(0)}
+                            className="block border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50"
+                          >
+                            <div className="flex gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#0d3b66]">
+                                <FiUsers size={17} />
+                              </div>
 
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <p className="truncate text-sm font-semibold text-slate-800">
-                                        {notification.name ||
-                                          "New message"}
-                                      </p>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  New subscribers
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-slate-500">
+                                  {newSubscriberCount} new newsletter
+                                  subscriber
+                                  {newSubscriberCount === 1 ? "" : "s"}.
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+                        )}
 
-                                      {!notification.is_read && (
-                                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#d62828]" />
-                                      )}
-                                    </div>
-
-                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                                      {notification.message ||
-                                        "New contact message received."}
-                                    </p>
-
-                                    <p className="mt-2 text-[11px] font-medium text-slate-400">
-                                      {formatNotificationTime(
-                                        notification.created_at
-                                      )}
-                                    </p>
-                                  </div>
+                        {notificationsEnabled &&
+                          notifications.length > 0 &&
+                          notifications.map((notification) => (
+                            <Link
+                              key={notification.id}
+                              href="/admin/messages"
+                              onClick={() => setNotificationOpen(false)}
+                              className="block border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50"
+                            >
+                              <div className="flex gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#0d3b66]">
+                                  <FiMail size={17} />
                                 </div>
-                              </Link>
-                            )
-                          )
-                        ) : (
-                          <div className="px-5 py-10 text-center">
+
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    New message
+                                  </p>
+                                  <p className="mt-1 truncate text-xs text-slate-500">
+                                    {notification.name} —{" "}
+                                    {notification.email}
+                                  </p>
+                                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
+                                    {notification.message}
+                                  </p>
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+
+                        {notificationCount === 0 && (
+                          <div className="px-4 py-10 text-center">
                             <FiBell
-                              size={24}
                               className="mx-auto text-slate-300"
+                              size={28}
                             />
-
-                            <p className="mt-3 text-sm font-semibold text-slate-600">
-                              No notifications
+                            <p className="mt-3 text-sm font-medium text-slate-500">
+                              No new notifications
                             </p>
-
                             <p className="mt-1 text-xs text-slate-400">
                               You&apos;re all caught up.
                             </p>
                           </div>
                         )}
                       </div>
-
-                      <div className="border-t border-slate-100 p-3">
-                        <Link
-                          href="/admin/messages"
-                          onClick={() =>
-                            setNotificationOpen(false)
-                          }
-                          className="
-                            inline-flex w-full
-                            items-center justify-center
-                            gap-2
-                            rounded-lg
-                            bg-[#d62828]
-                            px-3 py-2.5
-                            text-xs font-semibold
-                            text-white
-                            transition
-                            hover:bg-[#b91f1f]
-                          "
-                        >
-                          View All Messages
-                          <FiExternalLink size={13} />
-                        </Link>
-                      </div>
                     </div>
                   </>
                 )}
               </div>
 
-              {/* View website */}
+              {/* View Website */}
               <Link
                 href="/"
                 target="_blank"
-                className="
-                  hidden
-                  items-center gap-2
-                  rounded-xl
-                  bg-[#0d3b66]
-                  px-4 py-2.5
-                  text-sm font-semibold
-                  text-white
-                  shadow-sm
-                  transition
-                  hover:bg-[#092f52]
-                  focus:outline-none
-                  focus:ring-2
-                  focus:ring-[#0d3b66]
-                  focus:ring-offset-2
-                  sm:inline-flex
-                "
+                className="hidden items-center gap-2 rounded-xl bg-[#0d3b66] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#092d50] sm:flex"
               >
+                <FiExternalLink size={16} />
                 View Website
-                <FiExternalLink size={15} />
               </Link>
+
+              {/* Mobile menu */}
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 lg:hidden"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+              >
+                {sidebarOpen ? <FiX size={19} /> : <FiHome size={19} />}
+              </button>
             </div>
           </div>
+
+          {/* Mobile Navigation */}
+          {sidebarOpen && (
+            <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
+              <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium text-slate-600 transition hover:border-[#0d3b66] hover:text-[#0d3b66]"
+                    >
+                      <Icon size={17} />
+                      <span>{item.label}</span>
+
+                      {item.label === "Testimonials" &&
+                        pendingTestimonialCount > 0 && (
+                          <span className="ml-auto rounded-full bg-[#d62828] px-1.5 py-0.5 text-[9px] font-bold text-white">
+                            {pendingTestimonialCount}
+                          </span>
+                        )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          )}
         </header>
 
-        {/* =======================================================
-            DASHBOARD BODY
-           ======================================================= */}
-
+        {/* Dashboard Body */}
         <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {/* Welcome */}
-          <section className="mb-7">
-            <p className="text-sm font-medium text-slate-500">
-              Welcome back.
-            </p>
+          {/* Stats */}
+          <section>
+            <div className="mb-5 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Overview
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Live statistics from your GLAW Naturale database.
+                </p>
+              </div>
 
-            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0d3b66] sm:text-3xl">
-              Manage your GLAW Naturale website.
-            </h2>
+              <button
+                type="button"
+                onClick={loadDashboardData}
+                className="text-xs font-semibold text-[#0d3b66] hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Keep products, content, messages, and subscribers
-              organized from one place.
-            </p>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              {stats.map((stat) => {
+                const Icon = stat.icon;
+
+                return (
+                  <Link
+                    key={stat.label}
+                    href={stat.href}
+                    className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0d3b66]/30 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-[#0d3b66] transition group-hover:bg-[#0d3b66] group-hover:text-white">
+                        <Icon size={20} />
+                      </div>
+
+                      {stat.badge && (
+                        <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-[#d62828]">
+                          {stat.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-5">
+                      <p className="text-2xl font-bold text-slate-900">
+                        {loadingStats ? "—" : stat.value}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {stat.label}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </section>
 
-          {/* =====================================================
-              STAT CARDS
-             ===================================================== */}
-
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {/* Products */}
-            <Link
-              href="/admin/products"
-              className="
-                rounded-2xl
-                border border-slate-200
-                bg-white
-                p-5
-                shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:shadow-md
-              "
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Products
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-[#0d3b66]">
-                    {loadingStats ? "—" : productCount}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    flex h-11 w-11
-                    items-center justify-center
-                    rounded-xl
-                    bg-blue-50
-                    text-[#0d3b66]
-                  "
-                >
-                  <FiPackage size={20} />
-                </div>
-              </div>
-
-              <p className="mt-4 text-xs font-semibold text-[#d62828]">
-                Manage products →
-              </p>
-            </Link>
-
-            {/* Blog */}
-            <Link
-              href="/admin/blog"
-              className="
-                rounded-2xl
-                border border-slate-200
-                bg-white
-                p-5
-                shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:shadow-md
-              "
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Blog Posts
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-[#0d3b66]">
-                    {loadingStats ? "—" : blogPostCount}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    flex h-11 w-11
-                    items-center justify-center
-                    rounded-xl
-                    bg-blue-50
-                    text-[#0d3b66]
-                  "
-                >
-                  <FiBookOpen size={20} />
-                </div>
-              </div>
-
-              <p className="mt-4 text-xs font-semibold text-[#d62828]">
-                Manage blog →
-              </p>
-            </Link>
-
-            {/* Messages */}
-            <Link
-              href="/admin/messages"
-              className="
-                rounded-2xl
-                border border-slate-200
-                bg-white
-                p-5
-                shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:shadow-md
-              "
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Messages
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-[#0d3b66]">
-                    {loadingStats ? "—" : messageCount}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    flex h-11 w-11
-                    items-center justify-center
-                    rounded-xl
-                    bg-red-50
-                    text-[#d62828]
-                  "
-                >
-                  <FiMail size={20} />
-                </div>
-              </div>
-
-              <p className="mt-4 text-xs font-semibold text-[#d62828]">
-                View messages →
-              </p>
-            </Link>
-
-            {/* Subscribers */}
-            <Link
-              href="/admin/subscribers"
-              onClick={markSubscribersAsSeen}
-              className="
-                rounded-2xl
-                border border-slate-200
-                bg-white
-                p-5
-                shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:shadow-md
-              "
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Subscribers
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold text-[#0d3b66]">
-                    {loadingStats
-                      ? "—"
-                      : subscriberCount}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    relative flex h-11 w-11
-                    items-center justify-center
-                    rounded-xl
-                    bg-blue-50
-                    text-[#0d3b66]
-                  "
-                >
-                  <FiUsers size={20} />
-
-                  {newSubscriberCount > 0 && (
-                    <span
-                      className="
-                        absolute -right-1 -top-1
-                        h-3 w-3
-                        rounded-full
-                        bg-[#d62828]
-                        ring-2
-                        ring-white
-                      "
-                    />
-                  )}
-                </div>
-              </div>
-
-              <p className="mt-4 text-xs font-semibold text-[#d62828]">
-                View subscribers →
-              </p>
-            </Link>
-          </section>
-
-          {/* =====================================================
-              QUICK ACTIONS
-             ===================================================== */}
-
+          {/* Quick Actions */}
           <section className="mt-8">
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-[#0d3b66]">
+            <div className="mb-5">
+              <h2 className="text-lg font-bold text-slate-900">
                 Quick Actions
               </h2>
-
               <p className="mt-1 text-sm text-slate-500">
-                Jump directly to the areas you use most.
+                Jump directly to the areas you manage most.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Link
-                href="/admin/products"
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#d62828]
-                      text-white
-                    "
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+
+                return (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#0d3b66]/30 hover:shadow-md"
                   >
-                    <FiPackage size={21} />
-                  </div>
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[#0d3b66] transition group-hover:bg-[#0d3b66] group-hover:text-white">
+                        <Icon size={20} />
+                      </div>
 
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      Manage Products
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Add, edit, or remove products.
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/admin/blog"
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#0d3b66]
-                      text-white
-                    "
-                  >
-                    <FiBookOpen size={21} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      Manage Blog
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Create and manage blog posts.
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/admin/messages"
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#d62828]
-                      text-white
-                    "
-                  >
-                    <FiMail size={21} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      View Messages
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Review customer enquiries.
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/admin/subscribers"
-                onClick={markSubscribersAsSeen}
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#0d3b66]
-                      text-white
-                    "
-                  >
-                    <FiUsers size={21} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      Subscribers
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      View collected email subscribers.
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/admin/settings"
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#0d3b66]
-                      text-white
-                    "
-                  >
-                    <FiSettings size={21} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      Settings
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Manage admin preferences.
-                    </p>
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/"
-                target="_blank"
-                className="
-                  group rounded-2xl
-                  border border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                  transition
-                  hover:-translate-y-0.5
-                  hover:shadow-md
-                "
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="
-                      flex h-12 w-12 shrink-0
-                      items-center justify-center
-                      rounded-xl
-                      bg-[#d62828]
-                      text-white
-                    "
-                  >
-                    <FiExternalLink size={21} />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      View Website
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Open the public GLAW Naturale site.
-                    </p>
-                  </div>
-                </div>
-              </Link>
+                      <div>
+                        <h3 className="font-semibold text-slate-900">
+                          {action.label}
+                        </h3>
+                        <p className="mt-1 text-sm leading-5 text-slate-500">
+                          {action.description}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </section>
 
-          {/* =====================================================
-              CURRENT STAGE
-             ===================================================== */}
-
+          {/* Current Stage */}
           <section className="mt-8">
-            <div
-              className="
-                overflow-hidden
-                rounded-2xl
-                bg-[#0d3b66]
-                p-6
-                text-white
-                shadow-sm
-                sm:p-7
-              "
-            >
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="max-w-2xl">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d62828]">
                     Current Stage
                   </p>
 
-                  <h2 className="mt-2 text-xl font-bold sm:text-2xl">
-                    Keep your product catalogue up to date.
+                  <h2 className="mt-2 text-xl font-bold text-[#0d3b66]">
+                    Manage your GLAW Naturale content
                   </h2>
 
-                  <p className="mt-2 text-sm leading-6 text-blue-100">
-                    Your products are one of the main parts of the
-                    public website. Make sure names, descriptions,
-                    prices, and images are accurate.
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                    Keep your products, blog posts, customer testimonials,
+                    messages and newsletter subscribers organized from one
+                    dashboard.
                   </p>
                 </div>
 
                 <Link
                   href="/admin/products"
-                  className="
-                    inline-flex shrink-0
-                    items-center justify-center
-                    gap-2
-                    rounded-xl
-                    bg-[#d62828]
-                    px-5 py-3
-                    text-sm font-bold
-                    text-white
-                    shadow-sm
-                    transition
-                    hover:bg-[#b91f1f]
-                    focus:outline-none
-                    focus:ring-2
-                    focus:ring-white
-                    focus:ring-offset-2
-                    focus:ring-offset-[#0d3b66]
-                  "
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#d62828] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#b91f1f]"
                 >
                   Manage Products
-                  <FiPackage size={16} />
                 </Link>
               </div>
             </div>
           </section>
-
-          {/* =====================================================
-              FOOTER
-             ===================================================== */}
-
-          <footer className="pb-4 pt-10">
-            <div
-              className="
-                flex flex-col
-                gap-2
-                border-t border-slate-200
-                pt-5
-                text-xs
-                text-slate-400
-                sm:flex-row
-                sm:items-center
-                sm:justify-between
-              "
-            >
-              <p>
-                © {new Date().getFullYear()} GLAW Naturale.
-                Admin Dashboard.
-              </p>
-
-              <Link
-                href="/"
-                target="_blank"
-                className="
-                  font-semibold
-                  text-[#0d3b66]
-                  transition
-                  hover:text-[#d62828]
-                "
-              >
-                View public website
-              </Link>
-            </div>
-          </footer>
         </div>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              © {new Date().getFullYear()} GLAW Naturale. Admin Dashboard.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-fit font-semibold text-[#d62828] hover:underline"
+            >
+              Sign out
+            </button>
+          </div>
+        </footer>
       </main>
     </div>
   );

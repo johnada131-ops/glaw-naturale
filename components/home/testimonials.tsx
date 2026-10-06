@@ -1,67 +1,93 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
-const testimonials = [
-  {
-    quote:
-      "GLAW Naturale has become part of my healthy routine. The drinks are refreshing, natural, and actually taste good.",
-    name: "Amaka O.",
-    role: "Customer",
-  },
-  {
-    quote:
-      "I love knowing that I can enjoy something refreshing while still being intentional about what I put into my body.",
-    name: "Sarah A.",
-    role: "Customer",
-  },
-  {
-    quote:
-      "The taste is amazing, and the quality is even better. GLAW Naturale is one of those brands I keep coming back to.",
-    name: "Chioma E.",
-    role: "Customer",
-  },
-  {
-    quote:
-      "From the first bottle, I could tell there was something different about GLAW Naturale. Fresh, enjoyable, and made with care.",
-    name: "Blessing N.",
-    role: "Customer",
-  },
-];
+type Testimonial = {
+  id: string;
+  media_type: "image";
+  media_url: string;
+  created_at: string;
+};
 
 export default function Testimonials() {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadTestimonials() {
+      const supabase = createClient();
+
+      const { data, error } = await supabase
+        .from("testimonials")
+        .select("id, media_type, media_url, created_at")
+        .eq("status", "approved")
+        .eq("media_type", "image")
+        .order("created_at", { ascending: false });
+
+      if (!active) return;
+
+      if (error) {
+        console.error("Failed to load homepage testimonials:", error);
+        setLoaded(true);
+        return;
+      }
+
+      setTestimonials((data || []) as Testimonial[]);
+      setLoaded(true);
+    }
+
+    loadTestimonials();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const track = trackRef.current;
 
-    if (!track) return;
+    if (!track || testimonials.length === 0) return;
 
     let animationFrame: number;
     let position = 0;
+    let previousTimestamp = 0;
 
-    const animate = () => {
-      position -= 0.35;
+    const animate = (timestamp: number) => {
+      if (!track.children.length) return;
 
-      const firstCard = track.children[0] as HTMLElement;
+      const elapsed = previousTimestamp
+        ? Math.min(timestamp - previousTimestamp, 32)
+        : 16;
+
+      previousTimestamp = timestamp;
+
+      position -= 0.35 * (elapsed / 16);
+
+      const firstCard = track.children[0] as HTMLElement | undefined;
 
       if (firstCard) {
-        const cardWidth = firstCard.offsetWidth + 24;
+        const cardWidth =
+          firstCard.getBoundingClientRect().width + 24;
 
-        if (Math.abs(position) >= cardWidth) {
+        if (cardWidth > 24 && Math.abs(position) >= cardWidth) {
           track.appendChild(firstCard);
           position += cardWidth;
         }
       }
 
       track.style.transform = `translateX(${position}px)`;
+
       animationFrame = requestAnimationFrame(animate);
     };
 
     animationFrame = requestAnimationFrame(animate);
 
     return () => cancelAnimationFrame(animationFrame);
-  }, []);
+  }, [testimonials]);
 
   return (
     <section className="overflow-hidden bg-white py-20 sm:py-24 lg:py-28">
@@ -83,64 +109,54 @@ export default function Testimonials() {
         </div>
       </div>
 
-      {/* Testimonial carousel */}
+      {/* Image testimonial carousel */}
       <div className="relative">
-        <div
-          ref={trackRef}
-          className="flex w-max gap-6 pl-6 sm:pl-8 lg:pl-12"
-        >
-          {testimonials.map((testimonial, index) => (
-            <article
-              key={`${testimonial.name}-${index}`}
-              className="w-[300px] shrink-0 rounded-2xl border border-gray-100 bg-[#F8FAFC] p-7 shadow-sm sm:w-[360px] sm:p-8 lg:w-[390px]"
-            >
-              {/* Quote mark */}
-              <div className="mb-5 text-4xl font-serif leading-none text-[#C62828]">
-                “
-              </div>
+        {testimonials.length > 0 ? (
+          <div
+            ref={trackRef}
+            className="flex w-max gap-6 pl-6 sm:pl-8 lg:pl-12"
+          >
+            {testimonials.map((testimonial) => (
+              <article
+                key={testimonial.id}
+                className="w-[300px] shrink-0 overflow-hidden rounded-2xl sm:w-[360px] lg:w-[390px]"
+              >
+                <img
+                  src={testimonial.media_url}
+                  alt="GLAW Naturale customer testimonial"
+                  loading="lazy"
+                  decoding="async"
+                  className="block h-auto w-full rounded-2xl object-contain"
+                />
+              </article>
+            ))}
 
-              <p className="min-h-[120px] text-base leading-7 text-gray-700">
-                {testimonial.quote}
-              </p>
-
-              <div className="mt-7 border-t border-gray-200 pt-5">
-                <p className="font-semibold text-[#14213D]">
-                  {testimonial.name}
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  {testimonial.role}
-                </p>
-              </div>
-            </article>
-          ))}
-
-          {/* Duplicate cards for smoother continuous movement */}
-          {testimonials.map((testimonial, index) => (
-            <article
-              key={`duplicate-${testimonial.name}-${index}`}
-              className="w-[300px] shrink-0 rounded-2xl border border-gray-100 bg-[#F8FAFC] p-7 shadow-sm sm:w-[360px] sm:p-8 lg:w-[390px]"
-            >
-              <div className="mb-5 text-4xl font-serif leading-none text-[#C62828]">
-                “
-              </div>
-
-              <p className="min-h-[120px] text-base leading-7 text-gray-700">
-                {testimonial.quote}
-              </p>
-
-              <div className="mt-7 border-t border-gray-200 pt-5">
-                <p className="font-semibold text-[#14213D]">
-                  {testimonial.name}
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  {testimonial.role}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
+            {/* Duplicate images for continuous movement */}
+            {testimonials.map((testimonial) => (
+              <article
+                key={`duplicate-${testimonial.id}`}
+                aria-hidden="true"
+                className="w-[300px] shrink-0 overflow-hidden rounded-2xl sm:w-[360px] lg:w-[390px]"
+              >
+                <img
+                  src={testimonial.media_url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="block h-auto w-full rounded-2xl object-contain"
+                />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="px-6 text-center">
+            <p className="text-sm text-gray-500">
+              {loaded
+                ? "Customer experiences will appear here soon."
+                : "Loading customer experiences..."}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Small note */}

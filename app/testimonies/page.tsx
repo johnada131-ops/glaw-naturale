@@ -1,119 +1,104 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { createClient } from "@/lib/supabase/server";
 
-const testimonies = [
-  {
-    quote:
-      "GLAW Naturale has become one of those simple choices that fits naturally into my everyday routine.",
-    name: "Customer Name",
-    role: "Customer",
+export const metadata: Metadata = {
+  title: "Testimonials | GLAW Naturale",
+  description:
+    "See real testimonials and experiences shared by GLAW Naturale customers.",
+  robots: {
+    index: true,
+    follow: true,
   },
-  {
-    quote:
-      "The drinks are refreshing, convenient, and easy to enjoy as part of a healthier lifestyle.",
-    name: "Customer Name",
-    role: "Customer",
-  },
-  {
-    quote:
-      "I love having a natural option that I can easily include in my day.",
-    name: "Customer Name",
-    role: "Customer",
-  },
-  {
-    quote:
-      "GLAW Naturale makes choosing something refreshing and health-conscious feel simple.",
-    name: "Customer Name",
-    role: "Customer",
-  },
-  {
-    quote:
-      "The experience has been great, and the drinks are genuinely enjoyable.",
-    name: "Customer Name",
-    role: "Customer",
-  },
-  {
-    quote:
-      "A convenient option when you want something refreshing without moving away from healthier choices.",
-    name: "Customer Name",
-    role: "Customer",
-  },
-];
+};
 
-export default function TestimoniesPage() {
+type Testimonial = {
+  id: string;
+  media_type: "image" | "video";
+  media_url: string;
+  created_at: string;
+};
+
+export default async function TestimoniesPage() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("testimonials")
+    .select("id, media_type, media_url, created_at")
+    .eq("status", "approved")
+    .order("created_at", { ascending: false });
+
+  const testimonials = (data || []) as Testimonial[];
+
   return (
-    <main className="bg-white">
-      {/* HERO */}
-      <section className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-red">
-              Testimonies
+    <main className="min-h-screen bg-white">
+      {/* HEADER */}
+      <section className="px-5 pb-12 pt-16 sm:px-8 sm:pt-20">
+        <div className="mx-auto max-w-7xl">
+          <div className="max-w-2xl">
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-[#d62828]">
+              Customer Experiences
             </p>
 
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-navy sm:text-5xl lg:text-6xl">
-              What people are saying about GLAW Naturale.
+            <h1 className="text-3xl font-bold text-[#0d3b66] sm:text-4xl">
+              Testimonials
             </h1>
 
-            <p className="mt-6 max-w-2xl text-base leading-8 text-gray-600 sm:text-lg">
-              Real experiences from people who have enjoyed GLAW Naturale and
-              made it part of their everyday choices.
+            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
+              Real experiences shared by people who have enjoyed GLAW
+              Naturale.
             </p>
           </div>
         </div>
       </section>
 
-      {/* TESTIMONIES */}
-      <section className="mx-auto max-w-7xl px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {testimonies.map((testimony, index) => (
-            <article
-              key={index}
-              className="flex min-h-[280px] flex-col rounded-[2rem] border border-gray-100 bg-white p-7 shadow-sm sm:p-8"
-            >
-              {/* QUOTE MARK */}
-              <div className="text-4xl font-bold leading-none text-red">
-                “
-              </div>
-
-              <blockquote className="mt-5 flex-1 text-base leading-7 text-gray-600">
-                {testimony.quote}
-              </blockquote>
-
-              <div className="mt-8 border-t border-gray-100 pt-5">
-                <p className="text-sm font-semibold text-navy">
-                  {testimony.name}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-400">
-                  {testimony.role}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {/* BRAND CTA */}
-      <section className="bg-navy">
-        <div className="mx-auto max-w-4xl px-5 py-16 text-center sm:px-6 sm:py-20 lg:px-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/60">
-            GLAW Naturale
-          </p>
-
-          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Where health meets convenience, and nature meets your glass.
-          </h2>
-
-          <p className="mt-5 text-lg font-semibold text-white">
-            A Drink For Your Health.
-          </p>
-
-          <Link
-            href="/products"
-            className="mt-7 inline-flex rounded-full bg-red px-6 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white hover:text-navy"
-          >
-            Explore Products
-          </Link>
+      {/* TESTIMONIALS */}
+      <section className="px-5 pb-20 sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          {error ? (
+            <div className="rounded-2xl bg-slate-50 p-8 text-center">
+              <p className="text-sm text-slate-500">
+                Testimonials are temporarily unavailable.
+              </p>
+            </div>
+          ) : testimonials.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-10 text-center">
+              <p className="text-sm text-slate-500">
+                Testimonials will appear here soon.
+              </p>
+            </div>
+          ) : (
+            <div className="columns-1 gap-6 sm:columns-2 lg:columns-3">
+              {testimonials.map((testimonial) => (
+                <article
+                  key={testimonial.id}
+                  className="mb-6 break-inside-avoid overflow-hidden rounded-2xl bg-slate-50"
+                >
+                  {testimonial.media_type === "image" ? (
+                    <img
+                      src={testimonial.media_url}
+                      alt="GLAW Naturale customer testimonial"
+                      className="block h-auto w-full"
+                      loading="lazy"
+                    />
+                  ) : testimonial.media_type === "video" ? (
+                    <video
+                      controls
+                      playsInline
+                      preload="none"
+                      className="block h-auto w-full"
+                      aria-label="GLAW Naturale customer video testimonial"
+                    >
+                      <source
+                        src={testimonial.media_url}
+                        type="video/mp4"
+                      />
+                      Your browser does not support video playback.
+                    </video>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </main>
