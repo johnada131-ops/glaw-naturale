@@ -10,64 +10,28 @@ import {
   FiChevronRight,
   FiExternalLink,
   FiHome,
-  FiLogOut,
   FiMail,
   FiPackage,
   FiSettings,
   FiUsers,
+  FiX,
 } from "react-icons/fi";
 import { createClient } from "@/lib/supabase/client";
 
-const navigation = [
-  {
-    label: "Dashboard",
-    href: "/admin",
-    icon: FiHome,
-  },
-  {
-    label: "Products",
-    href: "/admin/products",
-    icon: FiPackage,
-  },
-  {
-    label: "Blog",
-    href: "/admin/blog",
-    icon: FiBookOpen,
-  },
-  {
-    label: "Messages",
-    href: "/admin/messages",
-    icon: FiMail,
-  },
-  {
-    label: "Subscribers",
-    href: "/admin/subscribers",
-    icon: FiUsers,
-  },
-  {
-    label: "Settings",
-    href: "/admin/settings",
-    icon: FiSettings,
-  },
-];
+const supabase = createClient();
 
 type NotificationMessage = {
   id: string;
-  name: string;
-  email: string;
-  subject: string | null;
+  name: string | null;
+  email: string | null;
+  message: string | null;
   created_at: string;
+  is_read: boolean;
 };
 
-const SUBSCRIBER_LAST_SEEN_KEY = "glaw_subscriber_last_seen";
+const SUBSCRIBER_LAST_SEEN_KEY = "glaw_admin_subscribers_last_seen";
 
-export default function AdminDashboardPage() {
-  /*
-   * One sidebar state for both desktop and mobile.
-   *
-   * true  = expanded
-   * false = collapsed
-   */
+export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [productCount, setProductCount] = useState(0);
@@ -78,416 +42,324 @@ export default function AdminDashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notifications, setNotifications] = useState<
-    NotificationMessage[]
-  >([]);
+  const [notifications, setNotifications] = useState<NotificationMessage[]>(
+    []
+  );
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   const [newSubscriberCount, setNewSubscriberCount] = useState(0);
 
-  const unreadNotificationCount = notifications.length;
+  const navigation = [
+    {
+      label: "Dashboard",
+      href: "/admin",
+      icon: FiHome,
+    },
+    {
+      label: "Products",
+      href: "/admin/products",
+      icon: FiPackage,
+    },
+    {
+      label: "Blog",
+      href: "/admin/blog",
+      icon: FiBookOpen,
+    },
+    {
+      label: "Messages",
+      href: "/admin/messages",
+      icon: FiMail,
+    },
+    {
+      label: "Subscribers",
+      href: "/admin/subscribers",
+      icon: FiUsers,
+    },
+    {
+      label: "Settings",
+      href: "/admin/settings",
+      icon: FiSettings,
+    },
+  ];
 
   useEffect(() => {
-    const supabase = createClient();
+    let mounted = true;
 
-    async function loadDashboardStats() {
-      const [
-        productsResult,
-        blogResult,
-        messagesResult,
-        subscribersResult,
-      ] = await Promise.all([
-        supabase
-          .from("products")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
+    const loadDashboard = async () => {
+      try {
+        setLoadingStats(true);
 
-        supabase
-          .from("blog_posts")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
+        const [
+          productsResult,
+          blogResult,
+          messagesResult,
+          subscribersResult,
+        ] = await Promise.all([
+          supabase
+            .from("products")
+            .select("*", { count: "exact", head: true }),
 
-        supabase
-          .from("contact_messages")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
+          supabase
+            .from("blog_posts")
+            .select("*", { count: "exact", head: true }),
 
-        supabase
-          .from("newsletter_subscribers")
-          .select("*", {
-            count: "exact",
-            head: true,
-          }),
-      ]);
+          supabase
+            .from("contact_messages")
+            .select("*", { count: "exact", head: true }),
 
-      if (!productsResult.error) {
+          supabase
+            .from("subscribers")
+            .select("*", { count: "exact", head: true }),
+        ]);
+
+        if (!mounted) return;
+
         setProductCount(productsResult.count ?? 0);
-      }
-
-      if (!blogResult.error) {
         setBlogPostCount(blogResult.count ?? 0);
-      }
-
-      if (!messagesResult.error) {
         setMessageCount(messagesResult.count ?? 0);
-      }
-
-      if (!subscribersResult.error) {
         setSubscriberCount(subscribersResult.count ?? 0);
+
+        await loadNotifications();
+        loadSubscriberNotifications();
+      } catch (error) {
+        console.error("Error loading admin dashboard:", error);
+      } finally {
+        if (mounted) {
+          setLoadingStats(false);
+        }
       }
+    };
 
-      setLoadingStats(false);
-    }
+    const loadNotifications = async () => {
+      try {
+        const { data: settings } = await supabase
+          .from("notification_settings")
+          .select(
+            "id, whatsapp_enabled, admin_whatsapp_number, contact_message_notifications"
+          )
+          .maybeSingle();
 
-    async function loadNotifications() {
-      const settingsResult = await supabase
-        .from("notification_settings")
-        .select("contact_message_notifications")
-        .limit(1)
-        .maybeSingle();
+        if (!mounted) return;
 
-      if (!settingsResult.error && settingsResult.data) {
         const enabled =
-          settingsResult.data.contact_message_notifications === true;
+          settings?.contact_message_notifications !== false;
 
         setNotificationsEnabled(enabled);
 
+        const { data, error } = await supabase
+          .from("contact_messages")
+          .select("id, name, email, message, created_at, is_read")
+          .order("created_at", { ascending: false })
+          .limit(8);
+
+        if (error) {
+          console.error("Error loading notifications:", error);
+          return;
+        }
+
+        if (!mounted) return;
+
         if (!enabled) {
           setNotifications([]);
-        }
-      }
-
-      const messagesResult = await supabase
-        .from("contact_messages")
-        .select("id, name, email, subject, created_at")
-        .eq("status", "unread")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(10);
-
-      if (!messagesResult.error) {
-        setNotifications(messagesResult.data ?? []);
-      }
-    }
-
-    async function loadSubscriberNotifications() {
-      /*
-       * Get the newest subscriber so we can determine
-       * whether anything new has arrived since the admin
-       * last viewed the subscriber notification.
-       */
-      const latestResult = await supabase
-        .from("newsletter_subscribers")
-        .select("id, created_at")
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(1)
-        .maybeSingle();
-
-      if (latestResult.error) {
-        console.error(
-          "Error checking subscriber notifications:",
-          latestResult.error
-        );
-        return;
-      }
-
-      if (!latestResult.data) {
-        setNewSubscriberCount(0);
-        return;
-      }
-
-      const latestCreatedAt = new Date(
-        latestResult.data.created_at
-      ).getTime();
-
-      const storedLastSeen = window.localStorage.getItem(
-        SUBSCRIBER_LAST_SEEN_KEY
-      );
-
-      /*
-       * First time opening the dashboard:
-       * treat all existing subscribers as already seen.
-       */
-      if (!storedLastSeen) {
-        window.localStorage.setItem(
-          SUBSCRIBER_LAST_SEEN_KEY,
-          latestResult.data.created_at
-        );
-
-        setNewSubscriberCount(0);
-        return;
-      }
-
-      const lastSeenTime = new Date(storedLastSeen).getTime();
-
-      /*
-       * If the newest subscriber is newer than the last
-       * seen timestamp, count how many active records
-       * arrived since then.
-       */
-      if (latestCreatedAt > lastSeenTime) {
-        const newSubscribersResult = await supabase
-          .from("newsletter_subscribers")
-          .select("id, created_at", {
-            count: "exact",
-            head: true,
-          })
-          .gt("created_at", storedLastSeen);
-
-        if (!newSubscribersResult.error) {
-          setNewSubscriberCount(newSubscribersResult.count ?? 0);
+          return;
         }
 
-        return;
+        setNotifications((data as NotificationMessage[]) || []);
+      } catch (error) {
+        console.error("Error loading notifications:", error);
       }
+    };
 
-      setNewSubscriberCount(0);
-    }
+    const loadSubscriberNotifications = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("subscribers")
+          .select("created_at")
+          .order("created_at", { ascending: false })
+          .limit(100);
 
-    loadDashboardStats();
-    loadNotifications();
-    loadSubscriberNotifications();
+        if (error) {
+          console.error("Error loading subscriber notifications:", error);
+          return;
+        }
+
+        if (!mounted) return;
+
+        const lastSeen = localStorage.getItem(SUBSCRIBER_LAST_SEEN_KEY);
+
+        if (!lastSeen) {
+          setNewSubscriberCount(0);
+          return;
+        }
+
+        const lastSeenTime = new Date(lastSeen).getTime();
+
+        const newCount =
+          data?.filter((subscriber) => {
+            if (!subscriber.created_at) return false;
+
+            return (
+              new Date(subscriber.created_at).getTime() > lastSeenTime
+            );
+          }).length ?? 0;
+
+        setNewSubscriberCount(newCount);
+      } catch (error) {
+        console.error("Error loading subscriber notifications:", error);
+      }
+    };
+
+    loadDashboard();
 
     const interval = window.setInterval(() => {
       loadNotifications();
       loadSubscriberNotifications();
-      loadDashboardStats();
     }, 15000);
 
     return () => {
+      mounted = false;
       window.clearInterval(interval);
     };
   }, []);
 
-  function markSubscribersAsSeen() {
+  const markSubscribersAsSeen = () => {
     const now = new Date().toISOString();
 
-    window.localStorage.setItem(
-      SUBSCRIBER_LAST_SEEN_KEY,
-      now
-    );
-
+    localStorage.setItem(SUBSCRIBER_LAST_SEEN_KEY, now);
     setNewSubscriberCount(0);
-  }
+  };
 
-  async function handleSignOut() {
-    const supabase = createClient();
-
+  const handleSignOut = async () => {
     await supabase.auth.signOut();
-
     window.location.href = "/admin/login";
-  }
+  };
 
-  function formatNotificationTime(dateString: string) {
+  const formatNotificationTime = (dateString: string) => {
     const date = new Date(dateString);
 
     return date.toLocaleString("en-NG", {
-      day: "numeric",
-      month: "short",
-      hour: "numeric",
-      minute: "2-digit",
+      dateStyle: "medium",
+      timeStyle: "short",
     });
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
-      {/* =========================================================
-          ADMIN SIDEBAR
-          Same collapse/expand behavior on desktop and mobile.
-      ========================================================== */}
-
+    <div className="min-h-screen overflow-x-hidden bg-[#f8fafc]">
+      {/* =========================
+          DESKTOP SIDEBAR
+          ========================= */}
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 flex flex-col
-          border-r border-border bg-white
-          transition-all duration-300 ease-in-out
-          ${sidebarOpen ? "w-[270px]" : "w-[64px]"}
-        `}
+        className={`fixed inset-y-0 left-0 z-40 hidden border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${
+          sidebarOpen ? "w-[270px]" : "w-[72px]"
+        }`}
       >
-        {/* LOGO / HEADER */}
+        {/* Logo */}
         <div
-          className={`
-            flex h-[76px] shrink-0 items-center border-b border-border
-            ${
-              sidebarOpen
-                ? "justify-start px-4"
-                : "justify-center px-2"
-            }
-          `}
-        >
-          <Link
-            href="/admin"
-            className="flex min-w-0 items-center"
-            aria-label="GLAW Naturale Admin"
-          >
-            {sidebarOpen ? (
-              <Image
-                src="/brand/glaw-naturale-logo.svg"
-                alt="GLAW Naturale"
-                width={150}
-                height={50}
-                className="h-auto w-[150px]"
-              />
-            ) : (
-              <Image
-                src="/icon.png"
-                alt="GLAW Naturale"
-                width={38}
-                height={38}
-                className="h-9 w-9 rounded-lg object-contain"
-              />
-            )}
-          </Link>
-        </div>
-
-        {/* ADMIN LABEL */}
-        <div
-          className={`
-            shrink-0 border-b border-border
-            ${sidebarOpen ? "px-4 py-4" : "flex justify-center px-2 py-4"}
-          `}
+          className={`flex h-20 items-center border-b border-slate-200 ${
+            sidebarOpen ? "justify-between px-5" : "justify-center px-3"
+          }`}
         >
           {sidebarOpen ? (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                GLAW Naturale
-              </p>
-
-              <p className="mt-1 font-[var(--font-montserrat)] text-sm font-bold text-navy">
-                Admin
-              </p>
-            </div>
+            <Link href="/admin" className="flex items-center">
+              <Image
+                src="/images/glaw-naturale-logo.svg"
+                alt="GLAW Naturale"
+                width={145}
+                height={48}
+                className="h-auto w-[145px]"
+                priority
+              />
+            </Link>
           ) : (
-            <span className="text-xs font-bold text-navy">A</span>
+            <Link href="/admin" aria-label="GLAW Naturale Admin">
+              <Image
+                src="/images/glaw-naturale-logo.svg"
+                alt="GLAW Naturale"
+                width={42}
+                height={42}
+                className="h-10 w-10 object-contain"
+                priority
+              />
+            </Link>
+          )}
+
+          {sidebarOpen && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Collapse sidebar"
+            >
+              <FiChevronLeft size={20} />
+            </button>
           )}
         </div>
 
-        {/* NAVIGATION */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <div className="space-y-1">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-
-              /*
-               * This dashboard file is /admin,
-               * so Dashboard is the active item here.
-               */
-              const isActive = item.href === "/admin";
-
-              const isMessageItem = item.label === "Messages";
-              const isSubscriberItem = item.label === "Subscribers";
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={!sidebarOpen ? item.label : undefined}
-                  onClick={() => {
-                    if (isSubscriberItem) {
-                      markSubscribersAsSeen();
-                    }
-                  }}
-                  className={`
-                    group relative flex items-center rounded-xl
-                    text-sm font-semibold transition-colors
-                    ${
-                      sidebarOpen
-                        ? "gap-3 px-4 py-3"
-                        : "justify-center px-2 py-3"
-                    }
-                    ${
-                      isActive
-                        ? "bg-navy text-white"
-                        : "text-navy hover:bg-surface"
-                    }
-                  `}
-                >
-                  <Icon
-                    size={19}
-                    className={
-                      isActive
-                        ? "shrink-0 text-white"
-                        : "shrink-0 text-muted group-hover:text-navy"
-                    }
-                  />
-
-                  {sidebarOpen && <span>{item.label}</span>}
-
-                  {/* MESSAGE NOTIFICATION */}
-                  {sidebarOpen &&
-                    isMessageItem &&
-                    unreadNotificationCount > 0 && (
-                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red px-1.5 text-[10px] font-bold text-white">
-                        {unreadNotificationCount > 9
-                          ? "9+"
-                          : unreadNotificationCount}
-                      </span>
-                    )}
-
-                  {!sidebarOpen &&
-                    isMessageItem &&
-                    unreadNotificationCount > 0 && (
-                      <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red px-1 text-[9px] font-bold text-white ring-2 ring-white">
-                        {unreadNotificationCount > 9
-                          ? "9+"
-                          : unreadNotificationCount}
-                      </span>
-                    )}
-
-                  {/* SUBSCRIBER NOTIFICATION */}
-                  {sidebarOpen &&
-                    isSubscriberItem &&
-                    newSubscriberCount > 0 && (
-                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red px-1.5 text-[10px] font-bold text-white">
-                        {newSubscriberCount > 9
-                          ? "9+"
-                          : newSubscriberCount}
-                      </span>
-                    )}
-
-                  {!sidebarOpen &&
-                    isSubscriberItem &&
-                    newSubscriberCount > 0 && (
-                      <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red px-1 text-[9px] font-bold text-white ring-2 ring-white">
-                        {newSubscriberCount > 9
-                          ? "9+"
-                          : newSubscriberCount}
-                      </span>
-                    )}
-                </Link>
-              );
-            })}
+        {!sidebarOpen && (
+          <div className="flex justify-center border-b border-slate-200 py-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Expand sidebar"
+            >
+              <FiChevronRight size={20} />
+            </button>
           </div>
+        )}
+
+        {/* Navigation */}
+        <nav className="flex-1 space-y-1 px-3 py-5">
+          {navigation.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.href === "/admin";
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex items-center rounded-xl text-sm font-medium transition ${
+                  sidebarOpen
+                    ? "gap-3 px-3 py-3"
+                    : "justify-center px-2 py-3"
+                } ${
+                  isActive
+                    ? "bg-[#0d3b66] text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+                title={!sidebarOpen ? item.label : undefined}
+              >
+                <Icon size={19} className="shrink-0" />
+
+                {sidebarOpen && <span>{item.label}</span>}
+
+                {item.label === "Subscribers" &&
+                  newSubscriberCount > 0 &&
+                  sidebarOpen && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                      {newSubscriberCount > 99
+                        ? "99+"
+                        : newSubscriberCount}
+                    </span>
+                  )}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* BOTTOM ACTIONS */}
-        <div className="shrink-0 border-t border-border p-3">
+        {/* Bottom Links */}
+        <div className="border-t border-slate-200 p-3">
           <Link
             href="/"
             target="_blank"
-            rel="noopener noreferrer"
+            className={`mb-2 flex items-center rounded-xl text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 ${
+              sidebarOpen
+                ? "gap-3 px-3 py-3"
+                : "justify-center px-2 py-3"
+            }`}
             title={!sidebarOpen ? "View Website" : undefined}
-            className={`
-              mb-2 flex items-center rounded-xl bg-red
-              text-sm font-semibold text-white
-              transition-colors hover:bg-navy
-              ${
-                sidebarOpen
-                  ? "gap-3 px-4 py-3"
-                  : "justify-center px-2 py-3"
-              }
-            `}
           >
-            <FiExternalLink size={18} className="shrink-0" />
+            <FiExternalLink size={19} className="shrink-0" />
 
             {sidebarOpen && <span>View Website</span>}
           </Link>
@@ -495,669 +367,449 @@ export default function AdminDashboardPage() {
           <button
             type="button"
             onClick={handleSignOut}
+            className={`flex w-full items-center rounded-xl text-sm font-medium text-red-600 transition hover:bg-red-50 ${
+              sidebarOpen
+                ? "gap-3 px-3 py-3"
+                : "justify-center px-2 py-3"
+            }`}
             title={!sidebarOpen ? "Sign Out" : undefined}
-            className={`
-              flex w-full items-center rounded-xl
-              text-sm font-semibold text-navy
-              transition-colors hover:bg-surface
-              ${
-                sidebarOpen
-                  ? "gap-3 px-4 py-3"
-                  : "justify-center px-2 py-3"
-              }
-            `}
           >
-            <FiLogOut size={18} className="shrink-0" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
 
             {sidebarOpen && <span>Sign Out</span>}
           </button>
         </div>
-
-        {/* COLLAPSE / EXPAND BUTTON */}
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((current) => !current)}
-          className="
-            absolute -right-3 top-[88px]
-            flex h-7 w-7 items-center justify-center
-            rounded-full border border-border bg-white
-            text-navy shadow-sm transition-colors
-            hover:bg-surface
-          "
-          aria-label={
-            sidebarOpen
-              ? "Collapse admin navigation"
-              : "Expand admin navigation"
-          }
-        >
-          {sidebarOpen ? (
-            <FiChevronLeft size={15} />
-          ) : (
-            <FiChevronRight size={15} />
-          )}
-        </button>
       </aside>
 
-      {/* =========================================================
-          MAIN AREA
-      ========================================================== */}
+      {/* =========================
+          DESKTOP NOTIFICATION BUTTON
+          ========================= */}
+      <div className="fixed right-4 top-4 z-50 hidden lg:block">
+        <button
+          type="button"
+          onClick={() => setNotificationOpen((prev) => !prev)}
+          className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          aria-label="Notifications"
+        >
+          <FiBell size={19} />
 
-      <div
-        className={`
-          min-h-screen
-          transition-[padding] duration-300 ease-in-out
-          ${sidebarOpen ? "pl-[270px]" : "pl-[64px]"}
-        `}
-      >
-        {/* =====================================================
-            NOTIFICATION BUTTON
-        ====================================================== */}
+          {notifications.filter((item) => !item.is_read).length > 0 && (
+            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+          )}
+        </button>
 
-        <div className="fixed right-4 top-4 z-40 sm:right-8 lg:right-10">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() =>
-                setNotificationOpen((current) => !current)
-              }
-              className="
-                relative flex h-11 w-11 items-center
-                justify-center rounded-full border border-border
-                bg-white text-navy shadow-sm
-                transition-colors hover:bg-surface
-              "
-              aria-label="Notifications"
-              aria-expanded={notificationOpen}
-            >
-              <FiBell size={19} />
+        {notificationOpen && (
+          <div className="absolute right-0 top-14 w-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Notifications
+                </h3>
 
-              {notificationsEnabled &&
-                unreadNotificationCount > 0 && (
-                  <span
-                    className="
-                      absolute -right-1 -top-1
-                      flex h-5 min-w-5 items-center justify-center
-                      rounded-full bg-red px-1.5
-                      text-[10px] font-bold text-white
-                      ring-2 ring-[#f8fafc]
-                    "
-                  >
-                    {unreadNotificationCount > 9
-                      ? "9+"
-                      : unreadNotificationCount}
-                  </span>
-                )}
-            </button>
-
-            {notificationOpen && (
-              <div
-                className="
-                  absolute right-0 top-14
-                  w-[min(360px,calc(100vw-2rem))]
-                  overflow-hidden rounded-2xl
-                  border border-border bg-white shadow-xl
-                "
-              >
-                <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                  <div>
-                    <p className="font-[var(--font-montserrat)] text-sm font-bold text-navy">
-                      Notifications
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted">
-                      {notificationsEnabled
-                        ? unreadNotificationCount > 0
-                          ? `${unreadNotificationCount} unread ${
-                              unreadNotificationCount === 1
-                                ? "message"
-                                : "messages"
-                            }`
-                          : "You're all caught up."
-                        : "Notifications are disabled."}
-                    </p>
-                  </div>
-
-                  <FiBell size={17} className="text-muted" />
-                </div>
-
-                {!notificationsEnabled ? (
-                  <div className="px-5 py-8 text-center">
-                    <p className="text-sm font-medium text-navy">
-                      Contact notifications are disabled.
-                    </p>
-
-                    <Link
-                      href="/admin/settings"
-                      onClick={() => setNotificationOpen(false)}
-                      className="mt-3 inline-flex text-xs font-semibold text-red hover:text-navy"
-                    >
-                      Open Settings →
-                    </Link>
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <div className="px-5 py-10 text-center">
-                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface text-muted">
-                      <FiBell size={18} />
-                    </div>
-
-                    <p className="mt-4 text-sm font-semibold text-navy">
-                      No new notifications
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-muted">
-                      New contact messages will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="max-h-[360px] overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <Link
-                          key={notification.id}
-                          href="/admin/messages"
-                          onClick={() =>
-                            setNotificationOpen(false)
-                          }
-                          className="
-                            block border-b border-border
-                            px-5 py-4 transition-colors
-                            hover:bg-surface
-                          "
-                        >
-                          <div className="flex gap-3">
-                            <div
-                              className="
-                                mt-1 flex h-8 w-8 shrink-0
-                                items-center justify-center
-                                rounded-full bg-red-50 text-red
-                              "
-                            >
-                              <FiMail size={15} />
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-navy">
-                                New message from {notification.name}
-                              </p>
-
-                              <p className="mt-1 truncate text-xs text-muted">
-                                {notification.subject ||
-                                  "Contact message"}
-                              </p>
-
-                              <p className="mt-1 text-[11px] text-muted">
-                                {formatNotificationTime(
-                                  notification.created_at
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-border px-5 py-3">
-                      <Link
-                        href="/admin/messages"
-                        onClick={() =>
-                          setNotificationOpen(false)
-                        }
-                        className="text-xs font-semibold text-red transition-colors hover:text-navy"
-                      >
-                        View all messages →
-                      </Link>
-                    </div>
-                  </>
-                )}
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Recent contact messages
+                </p>
               </div>
-            )}
+
+              <button
+                type="button"
+                onClick={() => setNotificationOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close notifications"
+              >
+                <FiX size={17} />
+              </button>
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto">
+              {!notificationsEnabled ? (
+                <div className="px-5 py-8 text-center">
+                  <p className="text-sm text-slate-500">
+                    Contact message notifications are disabled.
+                  </p>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="px-5 py-8 text-center">
+                  <FiBell className="mx-auto mb-3 text-slate-300" size={25} />
+
+                  <p className="text-sm text-slate-500">
+                    No notifications yet.
+                  </p>
+                </div>
+              ) : (
+                notifications.map((notification) => (
+                  <Link
+                    key={notification.id}
+                    href="/admin/messages"
+                    onClick={() => setNotificationOpen(false)}
+                    className="block border-b border-slate-100 px-5 py-4 transition hover:bg-slate-50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#0d3b66]">
+                        <FiMail size={15} />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-900">
+                          {notification.name || "New message"}
+                        </p>
+
+                        {notification.email && (
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            {notification.email}
+                          </p>
+                        )}
+
+                        {notification.message && (
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
+                            {notification.message}
+                          </p>
+                        )}
+
+                        <p className="mt-2 text-[11px] text-slate-400">
+                          {formatNotificationTime(
+                            notification.created_at
+                          )}
+                        </p>
+                      </div>
+
+                      {!notification.is_read && (
+                        <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-3">
+              <Link
+                href="/admin/messages"
+                onClick={() => setNotificationOpen(false)}
+                className="flex items-center justify-center gap-2 text-xs font-semibold text-[#0d3b66] hover:underline"
+              >
+                View all messages
+                <FiChevronRight size={14} />
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* =====================================================
-            DASHBOARD CONTENT
-        ====================================================== */}
-
-        <main className="px-4 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12">
-          <div className="mx-auto max-w-7xl">
-            {/* HEADING */}
-            <div className="mb-8 pr-14">
-              <p className="text-sm font-semibold text-red">
-                GLAW Naturale Admin
+      {/* =========================
+          MAIN CONTENT
+          ========================= */}
+      <main
+        className={`min-h-screen transition-all duration-300 ${
+          sidebarOpen ? "lg:ml-[270px]" : "lg:ml-[72px]"
+        }`}
+      >
+        <div className="px-4 py-8 sm:px-6 sm:py-10 lg:px-10 lg:py-12">
+          {/* Header */}
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="mb-2 text-sm font-medium text-[#0d3b66]">
+                Admin Dashboard
               </p>
 
-              <h1 className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy sm:text-4xl">
-                Welcome back.
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Welcome back
               </h1>
 
-              <p className="mt-2 text-sm text-muted sm:text-base">
-                Manage your website, products and content from here.
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+                Manage your GLAW Naturale website, products, content and
+                customer activity from one place.
               </p>
             </div>
 
-            {/* NOTIFICATION ALERT */}
-            {notificationsEnabled &&
-              unreadNotificationCount > 0 && (
-                <Link
-                  href="/admin/messages"
-                  className="
-                    mb-8 flex items-center gap-4 rounded-2xl
-                    border border-red/20 bg-red/5 p-4
-                    transition-colors hover:bg-red/10
-                  "
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red text-white">
-                    <FiBell size={18} />
-                  </div>
+            <Link
+              href="/"
+              target="_blank"
+              className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <FiExternalLink size={16} />
+              View Website
+            </Link>
+          </div>
 
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-navy">
-                      You have {unreadNotificationCount} new{" "}
-                      {unreadNotificationCount === 1
-                        ? "contact message"
-                        : "contact messages"}
-                      .
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted">
-                      Click to open your Messages.
-                    </p>
-                  </div>
-
-                  <FiChevronRight
-                    size={18}
-                    className="ml-auto shrink-0 text-red"
-                  />
-                </Link>
-              )}
-
-            {/* SUBSCRIBER ALERT */}
-            {newSubscriberCount > 0 && (
-              <Link
-                href="/admin/subscribers"
-                onClick={markSubscribersAsSeen}
-                className="
-                  mb-8 flex items-center gap-4 rounded-2xl
-                  border border-red/20 bg-red/5 p-4
-                  transition-colors hover:bg-red/10
-                "
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red text-white">
-                  <FiUsers size={18} />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-navy">
-                    You have {newSubscriberCount} new{" "}
-                    {newSubscriberCount === 1
-                      ? "newsletter subscriber"
-                      : "newsletter subscribers"}
-                    .
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted">
-                    Click to open your Subscribers.
-                  </p>
+          {/* Stats */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {/* Products */}
+            <Link
+              href="/admin/products"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#0d3b66]">
+                  <FiPackage size={21} />
                 </div>
 
                 <FiChevronRight
                   size={18}
-                  className="ml-auto shrink-0 text-red"
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </div>
+
+              <p className="mt-5 text-sm font-medium text-slate-500">
+                Products
+              </p>
+
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {loadingStats ? "—" : productCount}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-400">
+                Manage products displayed on the website.
+              </p>
+            </Link>
+
+            {/* Blog */}
+            <Link
+              href="/admin/blog"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#0d3b66]">
+                  <FiBookOpen size={21} />
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </div>
+
+              <p className="mt-5 text-sm font-medium text-slate-500">
+                Blog Posts
+              </p>
+
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {loadingStats ? "—" : blogPostCount}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-400">
+                Create and manage website articles.
+              </p>
+            </Link>
+
+            {/* Messages */}
+            <Link
+              href="/admin/messages"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#0d3b66]">
+                  <FiMail size={21} />
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </div>
+
+              <p className="mt-5 text-sm font-medium text-slate-500">
+                Messages
+              </p>
+
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {loadingStats ? "—" : messageCount}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-400">
+                View messages received from customers.
+              </p>
+            </Link>
+
+            {/* Subscribers */}
+            <Link
+              href="/admin/subscribers"
+              onClick={markSubscribersAsSeen}
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#0d3b66]">
+                  <FiUsers size={21} />
+
+                  {newSubscriberCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                      {newSubscriberCount > 99
+                        ? "99+"
+                        : newSubscriberCount}
+                    </span>
+                  )}
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </div>
+
+              <p className="mt-5 text-sm font-medium text-slate-500">
+                Subscribers
+              </p>
+
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {loadingStats ? "—" : subscriberCount}
+              </p>
+
+              <p className="mt-2 text-xs text-slate-400">
+                Manage people subscribed to updates.
+              </p>
+            </Link>
+          </div>
+
+          {/* Quick Actions */}
+          <section className="mt-8">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-slate-900">
+                Quick actions
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Go directly to the areas you manage most often.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Link
+                href="/admin/products"
+                className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#0d3b66]">
+                    <FiPackage size={19} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Manage Products
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Add, edit or remove products.
+                    </p>
+                  </div>
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
                 />
               </Link>
-            )}
 
-            {/* WELCOME PANEL */}
-            <section className="mb-8 overflow-hidden rounded-2xl bg-navy p-6 shadow-sm sm:p-8">
+              <Link
+                href="/admin/blog"
+                className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#0d3b66]">
+                    <FiBookOpen size={19} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Manage Blog
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Publish and manage articles.
+                    </p>
+                  </div>
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </Link>
+
+              <Link
+                href="/admin/settings"
+                className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-[#0d3b66]">
+                    <FiSettings size={19} />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Settings
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Manage website and notification settings.
+                    </p>
+                  </div>
+                </div>
+
+                <FiChevronRight
+                  size={18}
+                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-slate-500"
+                />
+              </Link>
+            </div>
+          </section>
+
+          {/* Current Stage */}
+          <section className="mt-8">
+            <div className="rounded-2xl bg-[#0d3b66] p-6 text-white shadow-sm sm:p-8">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-2xl">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                    Admin Workspace
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">
+                    GLAW Naturale
                   </p>
 
-                  <h2 className="mt-2 font-[var(--font-montserrat)] text-2xl font-bold text-white sm:text-3xl">
-                    Your website is taking shape.
+                  <h2 className="mt-2 text-xl font-bold sm:text-2xl">
+                    Your website is ready to manage.
                   </h2>
 
-                  <p className="mt-3 text-sm leading-6 text-white/70">
-                    Manage the parts of GLAW Naturale that are already
-                    connected to your admin system, and continue building
-                    from one workspace.
+                  <p className="mt-3 text-sm leading-6 text-blue-100">
+                    Products, blog posts, messages, subscribers and
+                    website settings can all be managed from the admin
+                    area.
                   </p>
                 </div>
 
-                <Link
-                  href="/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="
-                    inline-flex shrink-0 items-center
-                    justify-center gap-2 rounded-full
-                    bg-red px-6 py-3 text-sm font-semibold
-                    text-white transition-colors
-                    hover:bg-white hover:text-navy
-                  "
-                >
-                  <FiExternalLink size={16} />
-                  View Website
-                </Link>
-              </div>
-            </section>
-
-            {/* OVERVIEW */}
-            <section>
-              <div className="mb-5">
-                <h2 className="font-[var(--font-montserrat)] text-xl font-bold text-navy">
-                  Overview
-                </h2>
-
-                <p className="mt-1 text-sm text-muted">
-                  A quick look at your current admin workspace.
-                </p>
-              </div>
-
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
-                {/* PRODUCTS */}
                 <Link
                   href="/admin/products"
-                  className="
-                    group rounded-2xl border border-border
-                    bg-white p-6 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
+                  className="inline-flex w-fit shrink-0 items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#0d3b66] transition hover:bg-blue-50"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiPackage size={21} />
-                    </div>
-
-                    <FiChevronRight
-                      size={18}
-                      className="
-                        text-muted transition-transform
-                        group-hover:translate-x-1 group-hover:text-red
-                      "
-                    />
-                  </div>
-
-                  <p className="mt-5 text-sm font-medium text-muted">
-                    Products
-                  </p>
-
-                  <p className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy">
-                    {loadingStats ? "..." : productCount}
-                  </p>
-
-                  <p className="mt-2 text-sm text-muted">
-                    Current product catalog
-                  </p>
-                </Link>
-
-                {/* BLOG */}
-                <Link
-                  href="/admin/blog"
-                  className="
-                    group rounded-2xl border border-border
-                    bg-white p-6 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiBookOpen size={21} />
-                    </div>
-
-                    <FiChevronRight
-                      size={18}
-                      className="
-                        text-muted transition-transform
-                        group-hover:translate-x-1 group-hover:text-red
-                      "
-                    />
-                  </div>
-
-                  <p className="mt-5 text-sm font-medium text-muted">
-                    Blog Posts
-                  </p>
-
-                  <p className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy">
-                    {loadingStats ? "..." : blogPostCount}
-                  </p>
-
-                  <p className="mt-2 text-sm text-muted">
-                    Articles and health content
-                  </p>
-                </Link>
-
-                {/* MESSAGES */}
-                <Link
-                  href="/admin/messages"
-                  className="
-                    group rounded-2xl border border-border
-                    bg-white p-6 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiMail size={21} />
-                    </div>
-
-                    {unreadNotificationCount > 0 && (
-                      <span className="rounded-full bg-red px-2 py-1 text-[10px] font-bold text-white">
-                        {unreadNotificationCount} new
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-5 text-sm font-medium text-muted">
-                    Messages
-                  </p>
-
-                  <p className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy">
-                    {loadingStats ? "..." : messageCount}
-                  </p>
-
-                  <p className="mt-2 text-sm text-muted">
-                    Contact messages
-                  </p>
-                </Link>
-
-                {/* SUBSCRIBERS */}
-                <Link
-                  href="/admin/subscribers"
-                  onClick={markSubscribersAsSeen}
-                  className="
-                    group rounded-2xl border border-border
-                    bg-white p-6 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiUsers size={21} />
-                    </div>
-
-                    {newSubscriberCount > 0 ? (
-                      <span className="rounded-full bg-red px-2 py-1 text-[10px] font-bold text-white">
-                        {newSubscriberCount > 9
-                          ? "9+ new"
-                          : `${newSubscriberCount} new`}
-                      </span>
-                    ) : (
-                      <FiChevronRight
-                        size={18}
-                        className="
-                          text-muted transition-transform
-                          group-hover:translate-x-1 group-hover:text-red
-                        "
-                      />
-                    )}
-                  </div>
-
-                  <p className="mt-5 text-sm font-medium text-muted">
-                    Subscribers
-                  </p>
-
-                  <p className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy">
-                    {loadingStats ? "..." : subscriberCount}
-                  </p>
-
-                  <p className="mt-2 text-sm text-muted">
-                    Newsletter subscribers
-                  </p>
-                </Link>
-
-                {/* SETTINGS */}
-                <Link
-                  href="/admin/settings"
-                  className="
-                    group rounded-2xl border border-border
-                    bg-white p-6 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiSettings size={21} />
-                    </div>
-
-                    <FiChevronRight
-                      size={18}
-                      className="
-                        text-muted transition-transform
-                        group-hover:translate-x-1 group-hover:text-red
-                      "
-                    />
-                  </div>
-
-                  <p className="mt-5 text-sm font-medium text-muted">
-                    Settings
-                  </p>
-
-                  <p className="mt-1 font-[var(--font-montserrat)] text-3xl font-bold text-navy">
-                    —
-                  </p>
-
-                  <p className="mt-2 text-sm text-muted">
-                    Website configuration
-                  </p>
+                  Manage Products
+                  <FiChevronRight size={16} />
                 </Link>
               </div>
-            </section>
+            </div>
+          </section>
 
-            {/* GET STARTED */}
-            <section className="mt-10">
-              <div className="mb-5">
-                <h2 className="font-[var(--font-montserrat)] text-xl font-bold text-navy">
-                  Get Started
-                </h2>
+          {/* Footer */}
+          <div className="mt-10 border-t border-slate-200 pt-6">
+            <div className="flex flex-col gap-3 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+              <p>GLAW Naturale Admin</p>
 
-                <p className="mt-1 text-sm text-muted">
-                  Common actions from your admin workspace.
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Link
-                  href="/admin/products/new"
-                  className="
-                    group flex items-center justify-between
-                    rounded-2xl border border-border bg-white
-                    p-5 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiPackage size={20} />
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-navy">
-                        Add a Product
-                      </p>
-
-                      <p className="mt-1 text-sm text-muted">
-                        Add a new GLAW Naturale drink.
-                      </p>
-                    </div>
-                  </div>
-
-                  <FiChevronRight
-                    size={18}
-                    className="
-                      text-muted transition-transform
-                      group-hover:translate-x-1 group-hover:text-red
-                    "
-                  />
-                </Link>
-
-                <Link
-                  href="/admin/blog"
-                  className="
-                    group flex items-center justify-between
-                    rounded-2xl border border-border bg-white
-                    p-5 shadow-sm transition-colors
-                    hover:border-red hover:bg-surface
-                  "
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red">
-                      <FiBookOpen size={20} />
-                    </div>
-
-                    <div>
-                      <p className="font-semibold text-navy">
-                        Manage Blog
-                      </p>
-
-                      <p className="mt-1 text-sm text-muted">
-                        Create and manage health content.
-                      </p>
-                    </div>
-                  </div>
-
-                  <FiChevronRight
-                    size={18}
-                    className="
-                      text-muted transition-transform
-                      group-hover:translate-x-1 group-hover:text-red
-                    "
-                  />
-                </Link>
-              </div>
-            </section>
-
-            {/* CURRENT STAGE */}
-            <section className="mt-10">
-              <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-7">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted">
-                      Current Stage
-                    </p>
-
-                    <h2 className="mt-2 font-[var(--font-montserrat)] text-xl font-bold text-navy">
-                      Admin foundation is ready.
-                    </h2>
-
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-                      Products, blog management, contact messages and
-                      newsletter subscribers are connected to the custom
-                      admin system.
-                    </p>
-                  </div>
-
-                  <div className="shrink-0 rounded-full bg-red-50 px-4 py-2 text-xs font-bold text-red">
-                    Admin Ready
-                  </div>
-                </div>
-              </div>
-            </section>
+              <p>
+                Manage your website from one place.
+              </p>
+            </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
