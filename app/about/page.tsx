@@ -1,3 +1,5 @@
+
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -6,6 +8,33 @@ import {
   FiMapPin,
   FiMessageCircle,
 } from "react-icons/fi";
+
+const SITE_URL = "https://glawnaturale.vercel.app";
+const ABOUT_URL = `${SITE_URL}/about`;
+
+export const metadata: Metadata = {
+  title: "About GLAW Naturale N More | Our Story, Founder & Mission",
+  description:
+    "Discover GLAW Naturale N More, a Nigerian natural wellness brand established in 2020. Learn about our founder, natural fruit and vegetable juices, tigernut milk, team, mission, and commitment to healthier everyday living.",
+  alternates: {
+    canonical: ABOUT_URL,
+  },
+  openGraph: {
+    title: "About GLAW Naturale N More",
+    description:
+      "Discover our story, founder Grace Oladipo, natural drinks, team, and mission to make healthier everyday living more accessible.",
+    url: ABOUT_URL,
+    siteName: "GLAW Naturale N More",
+    type: "website",
+    locale: "en_NG",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "About GLAW Naturale N More",
+    description:
+      "Learn about GLAW Naturale N More, our founder, natural drinks, and commitment to healthier living.",
+  },
+};
 
 const teamMembers = [
   {
@@ -30,9 +59,56 @@ const teamMembers = [
   },
 ];
 
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: "About GLAW Naturale N More",
+  url: ABOUT_URL,
+  description:
+    "Learn about GLAW Naturale N More, its story, founder, team, mission, natural drinks, and commitment to healthier everyday living.",
+  inLanguage: "en-NG",
+  mainEntity: {
+    "@type": "Organization",
+    "@id": `${SITE_URL}/#organization`,
+    name: "GLAW Naturale N More",
+    url: SITE_URL,
+    description:
+      "A Nigerian natural wellness brand offering fruit and vegetable juices, tigernut milk, and healthy-living lifestyle content.",
+    foundingDate: "2020-08-11",
+    founder: {
+      "@type": "Person",
+      name: "Grace Oladipo",
+      jobTitle: "Founder and CEO",
+    },
+    address: {
+      "@type": "PostalAddress",
+      streetAddress:
+        "Rivtaf Golf Estate, GT 37B, Phase 2, Peter Odili Road, Okuruama",
+      addressLocality: "Port Harcourt",
+      addressRegion: "Rivers State",
+      addressCountry: "NG",
+    },
+    knowsAbout: [
+      "Natural fruit juices",
+      "Vegetable juices",
+      "Tigernut milk",
+      "Healthy living",
+      "Lifestyle modification",
+      "Fitness",
+    ],
+  },
+};
+
 export default function AboutPage() {
   return (
     <main className="bg-white text-navy">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+        }}
+      />
+
       {/* HERO */}
       <section className="bg-surface">
         <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-20 lg:px-10 lg:py-24">
