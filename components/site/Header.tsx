@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -79,7 +78,6 @@ function matchesProduct(
   const slug = product.slug.replace(/-/g, " ").toLowerCase();
   const description = (product.description ?? "").toLowerCase();
 
-  // Prioritize text that directly matches the product.
   if (
     name.includes(query) ||
     slug.includes(query) ||
@@ -88,7 +86,6 @@ function matchesProduct(
     return true;
   }
 
-  // Permit common spelling variations in product names.
   const queryWords = query.split(/[^a-z0-9]+/).filter(Boolean);
   const productWords = `${name} ${slug}`
     .split(/[^a-z0-9]+/)
@@ -217,7 +214,6 @@ export default function Header() {
 
   const normalizedSearch = normalize(searchTerm.trim());
 
-  // Exact name or slug matches always take priority.
   const exactMatches = products.filter((product) => {
     return (
       normalize(product.name) === normalizedSearch ||
@@ -225,7 +221,6 @@ export default function Header() {
     );
   });
 
-  // If there is an exact match, never show unrelated products.
   const suggestions = !normalizedSearch
     ? []
     : exactMatches.length > 0
@@ -267,6 +262,19 @@ export default function Header() {
     router.push(`/products/${product.slug}`);
   }
 
+  function viewAllSearchResults() {
+    const query = searchTerm.trim();
+
+    setSearchOpen(false);
+    setMenuOpen(false);
+
+    router.push(
+      query
+        ? `/products?search=${encodeURIComponent(query)}`
+        : "/products"
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-[76px] max-w-7xl items-center gap-3 px-4 sm:h-[82px] sm:gap-5 sm:px-6 lg:px-8">
@@ -291,7 +299,7 @@ export default function Header() {
           />
         </Link>
 
-        {/* Search bar */}
+        {/* Search bar - Public pages only */}
         {showSearch && (
           <div
             ref={searchRef}
@@ -356,7 +364,7 @@ export default function Header() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="flex h-full items-center justify-center text-xs text-gray-400">
+                            <div className="flex items-center justify-center text-xs text-gray-400">
                               GLAW
                             </div>
                           )}
@@ -378,7 +386,7 @@ export default function Header() {
 
                     <button
                       type="button"
-                      onClick={handleSearch as unknown as () => void}
+                      onClick={viewAllSearchResults}
                       className="w-full border-t border-gray-100 px-4 py-3 text-left text-sm font-semibold text-red hover:bg-gray-50"
                     >
                       See all search results →
@@ -401,7 +409,7 @@ export default function Header() {
 
         {/* Desktop navigation */}
         <nav
-          className="hidden items-center gap-4 xl:flex"
+          className="ml-auto hidden shrink-0 items-center gap-4 xl:flex"
           aria-label={
             showAdminNavigation
               ? "Authenticated navigation"
@@ -439,11 +447,11 @@ export default function Header() {
           )}
         </nav>
 
-        {/* Hamburger menu */}
+        {/* Mobile hamburger - stays at the far right on public and admin pages */}
         <button
           type="button"
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-navy transition-colors hover:bg-surface lg:hidden"
+          className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-navy transition-colors hover:bg-surface xl:hidden"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
         >
@@ -471,9 +479,9 @@ export default function Header() {
         </button>
       </div>
 
-      {/* Mobile navigation links */}
+      {/* Mobile navigation */}
       {menuOpen && (
-        <div className="border-t border-border bg-white lg:hidden">
+        <div className="border-t border-border bg-white xl:hidden">
           <nav
             className="mx-auto flex max-w-7xl flex-col px-5 py-3 sm:px-6"
             aria-label={
